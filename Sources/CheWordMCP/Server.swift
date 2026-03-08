@@ -9,8 +9,13 @@ class WordMCPServer {
     private let transport: StdioTransport
 
     private var openDocuments: [String: WordDocument] = [:]
+    private var documentOriginalPaths: [String: String] = [:]
+    private var documentDirtyState: [String: Bool] = [:]
+    private var documentAutosave: [String: Bool] = [:]
+    private var documentTrackChangesEnforced: [String: Bool] = [:]
 
     private let wordConverter = WordConverter()
+    private let defaultRevisionAuthor = "CheWordMCP"
 
     init() async {
         self.server = Server(
@@ -24,9 +29,14 @@ class WordMCPServer {
     }
 
     func run() async throws {
-        try await server.start(transport: transport)
-
-        await server.waitUntilCompleted()
+        do {
+            try await server.start(transport: transport)
+            await server.waitUntilCompleted()
+            await flushDirtyDocumentsOnShutdown()
+        } catch {
+            await flushDirtyDocumentsOnShutdown()
+            throw error
+        }
     }
 
     private func registerToolHandlers() async {
@@ -44,19 +54,132 @@ class WordMCPServer {
         }
     }
 
+    private func initializeSession(
+        docId: String,
+        document: WordDocument,
+        sourcePath: String?,
+        autosave: Bool
+    ) {
+        openDocuments[docId] = document
+        documentOriginalPaths[docId] = sourcePath
+        documentDirtyState[docId] = false
+        documentAutosave[docId] = autosave
+        documentTrackChangesEnforced[docId] = true
+    }
+
+    private func removeSession(docId: String) {
+        openDocuments.removeValue(forKey: docId)
+        documentOriginalPaths.removeValue(forKey: docId)
+        documentDirtyState.removeValue(forKey: docId)
+        documentAutosave.removeValue(forKey: docId)
+        documentTrackChangesEnforced.removeValue(forKey: docId)
+    }
+
+    private func isDirty(docId: String) -> Bool {
+        documentDirtyState[docId] ?? false
+    }
+
+    private func effectiveSavePath(for docId: String, explicitPath: String?) throws -> String {
+        if let explicitPath, !explicitPath.isEmpty {
+            return explicitPath
+        }
+        if let originalPath = documentOriginalPaths[docId], !originalPath.isEmpty {
+            return originalPath
+        }
+        throw WordError.invalidParameter(
+            "path",
+            "No path was provided and this document has no known original path. Call save_document with an explicit path."
+        )
+    }
+
+    private func enforceTrackChangesIfNeeded(_ document: inout WordDocument, docId: String) {
+        guard documentTrackChangesEnforced[docId] ?? true else { return }
+        if !document.isTrackChangesEnabled() {
+            document.enableTrackChanges(author: defaultRevisionAuthor)
+        }
+    }
+
+    private func persistDocumentToDisk(_ document: WordDocument, docId: String, path: String) throws {
+        let url = URL(fileURLWithPath: path)
+        try DocxWriter.write(document, to: url)
+        openDocuments[docId] = document
+        documentOriginalPaths[docId] = path
+        documentDirtyState[docId] = false
+    }
+
+    private func storeDocument(
+        _ document: WordDocument,
+        for docId: String,
+        markDirty: Bool = true
+    ) async throws {
+        openDocuments[docId] = document
+        documentDirtyState[docId] = markDirty
+
+        guard markDirty, documentAutosave[docId] == true, let path = documentOriginalPaths[docId] else {
+            return
+        }
+
+        try persistDocumentToDisk(document, docId: docId, path: path)
+    }
+
+    private func flushDirtyDocumentsOnShutdown() async {
+        for docId in openDocuments.keys.sorted() {
+            guard isDirty(docId: docId), let document = openDocuments[docId] else { continue }
+            guard let path = documentOriginalPaths[docId], !path.isEmpty else {
+                FileHandle.standardError.write(
+                    Data("Warning: document '\(docId)' has unsaved changes but no save path; shutdown flush skipped.\n".utf8)
+                )
+                continue
+            }
+
+            do {
+                try persistDocumentToDisk(document, docId: docId, path: path)
+            } catch {
+                FileHandle.standardError.write(
+                    Data("Warning: failed to flush '\(docId)' to '\(path)' during shutdown: \(error.localizedDescription)\n".utf8)
+                )
+            }
+        }
+    }
+
+    func invokeToolForTesting(name: String, arguments: [String: Value] = [:]) async -> CallTool.Result {
+        let params = CallTool.Parameters(name: name, arguments: arguments)
+        do {
+            return try await handleToolCall(params)
+        } catch {
+            return CallTool.Result(content: [.text("Error: \(error.localizedDescription)")], isError: true)
+        }
+    }
+
+    func isDocumentDirtyForTesting(_ docId: String) -> Bool {
+        isDirty(docId: docId)
+    }
+
+    func isTrackChangesEnabledForTesting(_ docId: String) -> Bool? {
+        openDocuments[docId]?.isTrackChangesEnabled()
+    }
+
+    func flushDirtyDocumentsForTesting() async {
+        await flushDirtyDocumentsOnShutdown()
+    }
+
     // MARK: - Tools Definition
 
     private var allTools: [Tool] {
         [
             Tool(
                 name: "create_document",
-                description: "Create a new Word document (.docx)",
+                description: "Create a new Word document (.docx). Track changes is enabled by default for edits.",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
                             "description": .string("File identification code for subsequent operations")
+                        ]),
+                        "autosave": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Whether to autosave to the known backing path after each edit. New documents still need an explicit first save.")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -64,7 +187,7 @@ class WordMCPServer {
             ),
             Tool(
                 name: "open_document",
-                description: "Open an existing Word file (.docx)",
+                description: "Open an existing Word file (.docx). Track changes is enabled by default for edits.",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
@@ -75,6 +198,10 @@ class WordMCPServer {
                         "doc_id": .object([
                             "type": .string("string"),
                             "description": .string("File identification code for subsequent operations")
+                        ]),
+                        "autosave": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Whether to autosave back to the opened file after each edit")
                         ])
                     ]),
                     "required": .array([.string("path"), .string("doc_id")])
@@ -82,7 +209,7 @@ class WordMCPServer {
             ),
             Tool(
                 name: "save_document",
-                description: "Save Word document (.docx)",
+                description: "Save the Word document (.docx). If no path is provided, the server reuses the original opened path when available.",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
@@ -92,15 +219,15 @@ class WordMCPServer {
                         ]),
                         "path": .object([
                             "type": .string("string"),
-                            "description": .string("storage path")
+                            "description": .string("Storage path. Optional when the document was opened from disk before editing.")
                         ])
                     ]),
-                    "required": .array([.string("doc_id"), .string("path")])
+                    "required": .array([.string("doc_id")])
                 ])
             ),
             Tool(
                 name: "close_document",
-                description: "Close an open file",
+                description: "Close an open file. Returns an error instead of closing when there are unsaved changes.",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
@@ -4043,10 +4170,12 @@ class WordMCPServer {
             throw WordError.missingParameter("doc_id")
         }
 
-        let doc = WordDocument()
-        openDocuments[docId] = doc
+        let autosave = args["autosave"]?.boolValue ?? false
+        var doc = WordDocument()
+        doc.enableTrackChanges(author: defaultRevisionAuthor)
+        initializeSession(docId: docId, document: doc, sourcePath: nil, autosave: autosave)
 
-        return "Created new document with id: \(docId)"
+        return "Created new document with id: \(docId). Track changes is enabled by default."
     }
 
     private func openDocument(args: [String: Value]) async throws -> String {
@@ -4056,27 +4185,33 @@ class WordMCPServer {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
         }
+        let autosave = args["autosave"]?.boolValue ?? false
 
         let url = URL(fileURLWithPath: path)
-        let doc = try DocxReader.read(from: url)
-        openDocuments[docId] = doc
+        var doc = try DocxReader.read(from: url)
+        if !doc.isTrackChangesEnabled() {
+            doc.enableTrackChanges(author: defaultRevisionAuthor)
+        }
+        initializeSession(docId: docId, document: doc, sourcePath: path, autosave: autosave)
 
-        return "Opened document '\(path)' with id: \(docId)"
+        return "Opened document '\(path)' with id: \(docId). Track changes is enabled by default."
     }
 
     private func saveDocument(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
         }
-        guard let path = args["path"]?.stringValue else {
-            throw WordError.missingParameter("path")
-        }
         guard let doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
 
-        let url = URL(fileURLWithPath: path)
-        try DocxWriter.write(doc, to: url)
+        let explicitPath = args["path"]?.stringValue
+        let path = try effectiveSavePath(for: docId, explicitPath: explicitPath)
+        try persistDocumentToDisk(doc, docId: docId, path: path)
+
+        if explicitPath == nil {
+            return "Saved document to original path: \(path)"
+        }
 
         return "Saved document to: \(path)"
     }
@@ -4086,7 +4221,24 @@ class WordMCPServer {
             throw WordError.missingParameter("doc_id")
         }
 
-        openDocuments.removeValue(forKey: docId)
+        guard openDocuments[docId] != nil else {
+            throw WordError.documentNotFound(docId)
+        }
+
+        if isDirty(docId: docId) {
+            let knownPath = documentOriginalPaths[docId] ?? "no known path"
+            let saveGuidance: String
+            if knownPath == "no known path" {
+                saveGuidance = " with an explicit path"
+            } else {
+                saveGuidance = " (path can be omitted to reuse \(knownPath))"
+            }
+            throw WordError.invalidFormat(
+                "Document '\(docId)' has unsaved changes. Call save_document first\(saveGuidance). If you want the user to confirm, report back and ask whether it should be saved now."
+            )
+        }
+
+        removeSession(docId: docId)
         return "Closed document: \(docId)"
     }
 
@@ -4096,7 +4248,12 @@ class WordMCPServer {
         }
 
         let ids = openDocuments.keys.sorted()
-        return "Open documents:\n" + ids.map { "- \($0)" }.joined(separator: "\n")
+        return "Open documents:\n" + ids.map { docId in
+            let dirty = isDirty(docId: docId) ? "dirty" : "clean"
+            let autosave = (documentAutosave[docId] ?? false) ? "autosave:on" : "autosave:off"
+            let path = documentOriginalPaths[docId] ?? "no-path"
+            return "- \(docId) [\(dirty), \(autosave), path:\(path)]"
+        }.joined(separator: "\n")
     }
 
     private func getDocumentInfo(args: [String: Value]) async throws -> String {
@@ -4169,6 +4326,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let index = args["index"]?.intValue
         let style = args["style"]?.stringValue
 
@@ -4183,7 +4342,7 @@ class WordMCPServer {
             doc.appendParagraph(para)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted paragraph at index \(index ?? doc.getParagraphs().count - 1)"
     }
@@ -4202,8 +4361,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.updateParagraph(at: index, text: text)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Updated paragraph at index \(index)"
     }
@@ -4219,8 +4380,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.deleteParagraph(at: index)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Deleted paragraph at index \(index)"
     }
@@ -4239,9 +4402,11 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let replaceAll = args["all"]?.boolValue ?? true
         let count = doc.replaceText(find: find, with: replace, all: replaceAll)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Replaced \(count) occurrence(s) of '\(find)' with '\(replace)'"
     }
@@ -4259,6 +4424,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         var format = RunProperties()
         if let bold = args["bold"]?.boolValue { format.bold = bold }
         if let italic = args["italic"]?.boolValue { format.italic = italic }
@@ -4268,7 +4435,7 @@ class WordMCPServer {
         if let color = args["color"]?.stringValue { format.color = color }
 
         try doc.formatParagraph(at: paragraphIndex, with: format)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Applied formatting to paragraph \(paragraphIndex)"
     }
@@ -4283,6 +4450,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         var props = ParagraphProperties()
         if let alignment = args["alignment"]?.stringValue {
@@ -4301,7 +4470,7 @@ class WordMCPServer {
         }
 
         try doc.setParagraphFormat(at: paragraphIndex, properties: props)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Applied paragraph format to index \(paragraphIndex)"
     }
@@ -4320,8 +4489,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.applyStyle(at: paragraphIndex, style: style)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Applied style '\(style)' to paragraph \(paragraphIndex)"
     }
@@ -4341,6 +4512,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         var table = Table(rowCount: rows, columnCount: cols)
 
@@ -4364,7 +4537,7 @@ class WordMCPServer {
             doc.appendTable(table)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted \(rows)x\(cols) table"
     }
@@ -4422,8 +4595,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.updateCell(tableIndex: tableIndex, row: row, col: col, text: text)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Updated cell at table[\(tableIndex)][\(row)][\(col)]"
     }
@@ -4439,8 +4614,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.deleteTable(at: tableIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Deleted table at index \(tableIndex)"
     }
@@ -4459,6 +4636,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         switch direction.lowercased() {
         case "horizontal":
             guard let row = args["row"]?.intValue else {
@@ -4471,7 +4650,7 @@ class WordMCPServer {
                 throw WordError.missingParameter("end_col")
             }
             try doc.mergeCellsHorizontal(tableIndex: tableIndex, row: row, startCol: col, endCol: endCol)
-            openDocuments[docId] = doc
+            try await storeDocument(doc, for: docId)
             return "Merged cells horizontally: row \(row), columns \(col) to \(endCol)"
 
         case "vertical":
@@ -4485,7 +4664,7 @@ class WordMCPServer {
                 throw WordError.missingParameter("end_row")
             }
             try doc.mergeCellsVertical(tableIndex: tableIndex, col: col, startRow: row, endRow: endRow)
-            openDocuments[docId] = doc
+            try await storeDocument(doc, for: docId)
             return "Merged cells vertically: column \(col), rows \(row) to \(endRow)"
 
         default:
@@ -4503,6 +4682,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         var results: [String] = []
 
@@ -4526,7 +4707,7 @@ class WordMCPServer {
             results.append("Set cell shading at [\(cellRow)][\(cellCol)]: \(shadingColor)")
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         if results.isEmpty {
             return "No style changes applied"
@@ -4584,6 +4765,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let typeStr = args["type"]?.stringValue ?? "paragraph"
         let styleType = StyleType(rawValue: typeStr) ?? .paragraph
 
@@ -4620,7 +4803,7 @@ class WordMCPServer {
         )
 
         try doc.addStyle(style)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Created style '\(styleId)' (\(name))"
     }
@@ -4635,6 +4818,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         var paraProps: ParagraphProperties? = nil
         if let alignment = args["alignment"]?.stringValue {
@@ -4660,7 +4845,7 @@ class WordMCPServer {
         )
 
         try doc.updateStyle(id: styleId, with: updates)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Updated style '\(styleId)'"
     }
@@ -4676,8 +4861,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.deleteStyle(id: styleId)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Deleted style '\(styleId)'"
     }
@@ -4695,6 +4882,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let items = itemsArray.compactMap { $0.stringValue }
         if items.isEmpty {
             throw WordError.invalidParameter("items", "Must contain at least one item")
@@ -4702,7 +4891,7 @@ class WordMCPServer {
 
         let index = args["index"]?.intValue
         let numId = doc.insertBulletList(items: items, at: index)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted bullet list with \(items.count) items (numId: \(numId))"
     }
@@ -4718,6 +4907,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let items = itemsArray.compactMap { $0.stringValue }
         if items.isEmpty {
             throw WordError.invalidParameter("items", "Must contain at least one item")
@@ -4725,7 +4916,7 @@ class WordMCPServer {
 
         let index = args["index"]?.intValue
         let numId = doc.insertNumberedList(items: items, at: index)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted numbered list with \(items.count) items (numId: \(numId))"
     }
@@ -4744,8 +4935,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.setListLevel(paragraphIndex: paragraphIndex, level: level)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Set list level to \(level) for paragraph \(paragraphIndex)"
     }
@@ -4763,8 +4956,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.setPageSize(name: sizeName)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         let size = doc.sectionProperties.pageSize
         return "Set page size to \(size.name) (\(size.widthInInches)\" x \(size.heightInInches)\")"
@@ -4778,6 +4973,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         if let preset = args["preset"]?.stringValue {
             try doc.setPageMargins(name: preset)
         } else {
@@ -4789,7 +4986,7 @@ class WordMCPServer {
             doc.setPageMargins(top: top, right: right, bottom: bottom, left: left)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         let margins = doc.sectionProperties.pageMargins
         return "Set page margins to \(margins.name) (top: \(margins.top), right: \(margins.right), bottom: \(margins.bottom), left: \(margins.left) twips)"
@@ -4806,12 +5003,14 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         guard let orientation = PageOrientation(rawValue: orientationStr.lowercased()) else {
             throw WordError.invalidParameter("orientation", "Must be 'portrait' or 'landscape'")
         }
 
         doc.setPageOrientation(orientation)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Set page orientation to \(orientation.rawValue)"
     }
@@ -4824,9 +5023,11 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let index = args["at_index"]?.intValue
         doc.insertPageBreak(at: index)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         if let index = index {
             return "Inserted page break at position \(index)"
@@ -4843,6 +5044,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let typeStr = args["type"]?.stringValue ?? "nextPage"
         guard let breakType = SectionBreakType(rawValue: typeStr) else {
             throw WordError.invalidParameter("type", "Must be 'nextPage', 'continuous', 'evenPage', or 'oddPage'")
@@ -4850,7 +5053,7 @@ class WordMCPServer {
 
         let index = args["at_index"]?.intValue
         doc.insertSectionBreak(type: breakType, at: index)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         if let index = index {
             return "Inserted \(breakType.rawValue) section break at position \(index)"
@@ -4872,6 +5075,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let typeStr = args["type"]?.stringValue ?? "default"
         let headerType: HeaderFooterType
         switch typeStr.lowercased() {
@@ -4881,7 +5086,7 @@ class WordMCPServer {
         }
 
         let header = doc.addHeader(text: text, type: headerType)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Added header with id '\(header.id)' (type: \(headerType.rawValue))"
     }
@@ -4900,8 +5105,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.updateHeader(id: headerId, text: text)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Updated header '\(headerId)'"
     }
@@ -4913,6 +5120,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let typeStr = args["type"]?.stringValue ?? "default"
         let footerType: HeaderFooterType
@@ -4929,7 +5138,7 @@ class WordMCPServer {
             footer = doc.addFooterWithPageNumber(format: .simple, type: footerType)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Added footer with id '\(footer.id)' (type: \(footerType.rawValue))"
     }
@@ -4948,8 +5157,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.updateFooter(id: footerId, text: text)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Updated footer '\(footerId)'"
     }
@@ -4961,6 +5172,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let formatStr = args["format"]?.stringValue ?? "simple"
         let format: PageNumberFormat
@@ -4977,7 +5190,7 @@ class WordMCPServer {
         }
 
         let footer = doc.addFooterWithPageNumber(format: format, type: .default)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted page number in footer '\(footer.id)' with format '\(formatStr)'"
     }
@@ -5004,6 +5217,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let index = args["index"]?.intValue
         let name = args["name"]?.stringValue ?? "Picture"
         let description = args["description"]?.stringValue ?? ""
@@ -5018,7 +5233,7 @@ class WordMCPServer {
             description: description
         )
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted image '\(fileName)' with id '\(imageId)' (\(width)x\(height) pixels)"
     }
@@ -5040,6 +5255,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: path) else {
             throw WordError.fileNotFound(path)
@@ -5058,7 +5275,7 @@ class WordMCPServer {
             description: description
         )
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         let url = URL(fileURLWithPath: path)
         return "Inserted image '\(url.lastPathComponent)' from path with id '\(imageId)' (\(width)x\(height) pixels)"
@@ -5075,11 +5292,13 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let width = args["width"]?.intValue
         let height = args["height"]?.intValue
 
         try doc.updateImage(imageId: imageId, widthPx: width, heightPx: height)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         var changes: [String] = []
         if let w = width { changes.append("width: \(w)px") }
@@ -5099,8 +5318,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.deleteImage(imageId: imageId)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Deleted image '\(imageId)'"
     }
@@ -5196,6 +5417,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let hasBorder = args["has_border"]?.boolValue
         let borderColor = args["border_color"]?.stringValue
         let borderWidth = args["border_width"]?.intValue
@@ -5209,7 +5432,7 @@ class WordMCPServer {
             hasShadow: hasShadow
         )
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         var changes: [String] = []
         if let border = hasBorder { changes.append("border: \(border)") }
@@ -5301,6 +5524,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let paragraphIndex = args["paragraph_index"]?.intValue
         let tooltip = args["tooltip"]?.stringValue
 
@@ -5311,7 +5536,7 @@ class WordMCPServer {
             tooltip: tooltip
         )
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted hyperlink '\(text)' -> \(url) with id '\(hyperlinkId)'"
     }
@@ -5330,6 +5555,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let paragraphIndex = args["paragraph_index"]?.intValue
         let tooltip = args["tooltip"]?.stringValue
 
@@ -5340,7 +5567,7 @@ class WordMCPServer {
             tooltip: tooltip
         )
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted internal link '\(text)' -> bookmark '\(bookmarkName)' with id '\(hyperlinkId)'"
     }
@@ -5356,11 +5583,13 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let text = args["text"]?.stringValue
         let url = args["url"]?.stringValue
 
         try doc.updateHyperlink(hyperlinkId: hyperlinkId, text: text, url: url)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         var changes: [String] = []
         if let text = text { changes.append("text: '\(text)'") }
@@ -5380,8 +5609,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.deleteHyperlink(hyperlinkId: hyperlinkId)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Deleted hyperlink '\(hyperlinkId)'"
     }
@@ -5397,10 +5628,12 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let paragraphIndex = args["paragraph_index"]?.intValue
 
         let bookmarkId = try doc.insertBookmark(name: name, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted bookmark '\(name)' with id \(bookmarkId)"
     }
@@ -5416,8 +5649,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.deleteBookmark(name: name)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Deleted bookmark '\(name)'"
     }
@@ -5441,8 +5676,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let commentId = try doc.insertComment(text: text, author: author, paragraphIndex: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted comment with id \(commentId) by '\(author)'"
     }
@@ -5461,8 +5698,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.updateComment(commentId: commentId, text: text)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Updated comment \(commentId)"
     }
@@ -5478,8 +5717,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         try doc.deleteComment(commentId: commentId)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Deleted comment \(commentId)"
     }
@@ -5516,9 +5757,10 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        let author = args["author"]?.stringValue ?? "Unknown"
+        let author = args["author"]?.stringValue ?? defaultRevisionAuthor
+        documentTrackChangesEnforced[docId] = true
         doc.enableTrackChanges(author: author)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Track changes enabled for '\(author)'"
     }
@@ -5531,8 +5773,9 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        documentTrackChangesEnforced[docId] = false
         doc.disableTrackChanges()
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Track changes disabled"
     }
@@ -5545,18 +5788,20 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let acceptAll = args["all"]?.boolValue ?? false
 
         if acceptAll {
             doc.acceptAllRevisions()
-            openDocuments[docId] = doc
+            try await storeDocument(doc, for: docId)
             return "Accepted all revisions"
         } else {
             guard let revisionId = args["revision_id"]?.intValue else {
                 throw WordError.missingParameter("revision_id")
             }
             try doc.acceptRevision(revisionId: revisionId)
-            openDocuments[docId] = doc
+            try await storeDocument(doc, for: docId)
             return "Accepted revision \(revisionId)"
         }
     }
@@ -5569,18 +5814,20 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let rejectAll = args["all"]?.boolValue ?? false
 
         if rejectAll {
             doc.rejectAllRevisions()
-            openDocuments[docId] = doc
+            try await storeDocument(doc, for: docId)
             return "Rejected all revisions"
         } else {
             guard let revisionId = args["revision_id"]?.intValue else {
                 throw WordError.missingParameter("revision_id")
             }
             try doc.rejectRevision(revisionId: revisionId)
-            openDocuments[docId] = doc
+            try await storeDocument(doc, for: docId)
             return "Rejected revision \(revisionId)"
         }
     }
@@ -5594,6 +5841,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -5602,7 +5851,7 @@ class WordMCPServer {
         }
 
         let footnoteId = try doc.insertFootnote(text: text, paragraphIndex: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
         return "Inserted footnote \(footnoteId) at paragraph \(paragraphIndex)"
     }
 
@@ -5613,12 +5862,14 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let footnoteId = args["footnote_id"]?.intValue else {
             throw WordError.missingParameter("footnote_id")
         }
 
         try doc.deleteFootnote(footnoteId: footnoteId)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
         return "Deleted footnote \(footnoteId)"
     }
 
@@ -5629,6 +5880,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -5637,7 +5890,7 @@ class WordMCPServer {
         }
 
         let endnoteId = try doc.insertEndnote(text: text, paragraphIndex: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
         return "Inserted endnote \(endnoteId) at paragraph \(paragraphIndex)"
     }
 
@@ -5648,12 +5901,14 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let endnoteId = args["endnote_id"]?.intValue else {
             throw WordError.missingParameter("endnote_id")
         }
 
         try doc.deleteEndnote(endnoteId: endnoteId)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
         return "Deleted endnote \(endnoteId)"
     }
 
@@ -5666,6 +5921,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let index = args["index"]?.intValue
         let title = args["title"]?.stringValue
@@ -5681,7 +5938,7 @@ class WordMCPServer {
             includePageNumbers: includePageNumbers,
             useHyperlinks: useHyperlinks
         )
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted table of contents (heading levels \(minLevel)-\(maxLevel))"
     }
@@ -5693,6 +5950,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -5704,7 +5963,7 @@ class WordMCPServer {
         let maxLength = args["max_length"]?.intValue
 
         try doc.insertTextField(at: paragraphIndex, name: name, defaultValue: defaultValue, maxLength: maxLength)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted text field '\(name)' at paragraph \(paragraphIndex)"
     }
@@ -5716,6 +5975,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -5726,7 +5987,7 @@ class WordMCPServer {
         let isChecked = args["is_checked"]?.boolValue ?? false
 
         try doc.insertCheckbox(at: paragraphIndex, name: name, isChecked: isChecked)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted checkbox '\(name)' (checked: \(isChecked)) at paragraph \(paragraphIndex)"
     }
@@ -5738,6 +5999,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -5764,7 +6027,7 @@ class WordMCPServer {
         let selectedIndex = args["selected_index"]?.intValue ?? 0
 
         try doc.insertDropdown(at: paragraphIndex, name: name, options: options, selectedIndex: selectedIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted dropdown '\(name)' with \(options.count) options at paragraph \(paragraphIndex)"
     }
@@ -5776,6 +6039,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let latex = args["latex"]?.stringValue else {
             throw WordError.missingParameter("latex")
         }
@@ -5784,7 +6049,7 @@ class WordMCPServer {
         let displayMode = args["display_mode"]?.boolValue ?? false
 
         doc.insertEquation(at: paragraphIndex, latex: latex, displayMode: displayMode)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted equation (display mode: \(displayMode))"
     }
@@ -5796,6 +6061,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -5838,7 +6105,7 @@ class WordMCPServer {
         )
 
         try doc.setParagraphBorder(at: paragraphIndex, border: border)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Set border on paragraph \(paragraphIndex)"
     }
@@ -5850,6 +6117,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -5863,7 +6132,7 @@ class WordMCPServer {
         }
 
         try doc.setParagraphShading(at: paragraphIndex, fill: fill, pattern: pattern)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Set shading on paragraph \(paragraphIndex) (fill: #\(fill))"
     }
@@ -5875,6 +6144,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -5884,7 +6155,7 @@ class WordMCPServer {
         let kern = args["kern"]?.intValue
 
         try doc.setCharacterSpacing(at: paragraphIndex, spacing: spacing, position: position, kern: kern)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         var changes: [String] = []
         if let spacing = spacing { changes.append("spacing: \(spacing)") }
@@ -5901,6 +6172,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -5913,7 +6186,7 @@ class WordMCPServer {
         }
 
         try doc.setTextEffect(at: paragraphIndex, effect: effect)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Applied '\(effectType)' effect to paragraph \(paragraphIndex)"
     }
@@ -5927,6 +6200,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let commentId = args["comment_id"]?.intValue else {
             throw WordError.missingParameter("comment_id")
         }
@@ -5939,7 +6214,7 @@ class WordMCPServer {
             throw WordError.invalidParameter("comment_id", "Comment with ID \(commentId) not found")
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
         return "Added reply to comment \(commentId) by \(author) (reply ID: \(reply.id))"
     }
 
@@ -5950,13 +6225,15 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let commentId = args["comment_id"]?.intValue else {
             throw WordError.missingParameter("comment_id")
         }
         let resolved = args["resolved"]?.boolValue ?? true
 
         doc.comments.markAsDone(commentId, done: resolved)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Comment \(commentId) \(resolved ? "resolved" : "reopened")"
     }
@@ -5970,6 +6247,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let path = args["path"]?.stringValue else {
             throw WordError.missingParameter("path")
         }
@@ -6024,7 +6303,7 @@ class WordMCPServer {
         )
 
         try doc.insertDrawing(drawing, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted floating image '\(url.lastPathComponent)' at paragraph \(paragraphIndex)"
     }
@@ -6050,6 +6329,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -6089,7 +6370,7 @@ class WordMCPServer {
         )
 
         try doc.insertFieldCode(ifField, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted IF field at paragraph \(paragraphIndex): IF \(leftOperand) \(operatorStr) \(rightOperand)"
     }
@@ -6101,6 +6382,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -6115,7 +6398,7 @@ class WordMCPServer {
         )
 
         try doc.insertFieldCode(calcField, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted calculation field '\(expression)' at paragraph \(paragraphIndex)"
     }
@@ -6127,6 +6410,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -6147,7 +6432,7 @@ class WordMCPServer {
         let dateField = DateTimeField(type: fieldType, dateFormat: format)
 
         try doc.insertFieldCode(dateField, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted \(typeStr) field with format '\(format)' at paragraph \(paragraphIndex)"
     }
@@ -6159,6 +6444,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -6180,7 +6467,7 @@ class WordMCPServer {
         let infoField = DocumentInfoField(type: infoType)
 
         try doc.insertFieldCode(infoField, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted \(typeStr) field at paragraph \(paragraphIndex)"
     }
@@ -6192,6 +6479,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -6208,7 +6497,7 @@ class WordMCPServer {
         )
 
         try doc.insertFieldCode(mergeField, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted MERGEFIELD '\(fieldName)' at paragraph \(paragraphIndex)"
     }
@@ -6220,6 +6509,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -6234,7 +6525,7 @@ class WordMCPServer {
         )
 
         try doc.insertFieldCode(seqField, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted SEQ '\(identifier)' field at paragraph \(paragraphIndex)"
     }
@@ -6248,6 +6539,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let paragraphIndex = args["paragraph_index"]?.intValue else {
             throw WordError.missingParameter("paragraph_index")
         }
@@ -6277,7 +6570,7 @@ class WordMCPServer {
         let contentControl = ContentControl(sdt: sdt, content: contentText)
 
         try doc.insertContentControl(contentControl, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted \(typeStr) content control '\(tag)' at paragraph \(paragraphIndex)"
     }
@@ -6289,6 +6582,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
         guard let tag = args["tag"]?.stringValue else {
             throw WordError.missingParameter("tag")
         }
@@ -6321,7 +6616,7 @@ class WordMCPServer {
         )
 
         try doc.insertRepeatingSection(repeatingSection, at: index)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted repeating section '\(tag)' with \(items.count) item(s) at index \(index)"
     }
@@ -6341,6 +6636,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let position = args["position"]?.intValue
 
         let paragraphs = doc.getParagraphs()
@@ -6356,7 +6653,7 @@ class WordMCPServer {
         let newText = String(currentText[..<insertIndex]) + text + String(currentText[insertIndex...])
 
         try doc.updateParagraph(at: paragraphIndex, text: newText)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted text at paragraph \(paragraphIndex)\(position.map { ", position \($0)" } ?? " (at end)")"
     }
@@ -6526,9 +6823,11 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let count = doc.getRevisions().count
         doc.acceptAllRevisions()
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Accepted \(count) revision(s)"
     }
@@ -6541,9 +6840,11 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let count = doc.getRevisions().count
         doc.rejectAllRevisions()
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Rejected \(count) revision(s)"
     }
@@ -6555,6 +6856,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         var props = doc.properties
 
@@ -6575,7 +6878,7 @@ class WordMCPServer {
         }
 
         doc.properties = props
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Updated document properties"
     }
@@ -7524,6 +7827,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let numCols = min(max(columns, 1), 4)
         let space = args["space"]?.intValue ?? 720
         let _ = args["equal_width"]?.boolValue ?? true
@@ -7531,7 +7836,7 @@ class WordMCPServer {
 
         doc.sectionProperties.columns = numCols
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         var result = "Set document to \(numCols) column(s)"
         if numCols > 1 {
@@ -7555,6 +7860,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let paragraphs = doc.getParagraphs()
         guard paragraphIndex >= 0 && paragraphIndex < paragraphs.count else {
             throw WordError.invalidIndex(paragraphIndex)
@@ -7567,7 +7874,7 @@ class WordMCPServer {
         columnBreakPara.properties.pageBreakBefore = false
 
         doc.insertParagraph(columnBreakPara, at: paragraphIndex + 1)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Inserted column break after paragraph \(paragraphIndex)"
     }
@@ -7648,6 +7955,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let font = args["font"]?.stringValue
         let position = args["position"]?.stringValue ?? "end"
 
@@ -7681,7 +7990,7 @@ class WordMCPServer {
             doc.body.children[actualIndex] = .paragraph(para)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         var result = "Inserted symbol (U+\(charCode.uppercased()))"
         if let fontName = font {
@@ -7728,6 +8037,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let dropCapType = args["type"]?.stringValue ?? "drop"
         let lines = min(max(args["lines"]?.intValue ?? 3, 2), 10)
         let distance = args["distance"]?.intValue ?? 0
@@ -7752,14 +8063,14 @@ class WordMCPServer {
 
             if dropCapType == "none" {
                 doc.body.children[actualIndex] = .paragraph(para)
-                openDocuments[docId] = doc
+                try await storeDocument(doc, for: docId)
                 return "Drop cap removed from paragraph \(paragraphIndex)"
             }
 
             doc.body.children[actualIndex] = .paragraph(para)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         var result = "Drop cap (\(dropCapType)) applied to paragraph \(paragraphIndex)"
         result += " (lines: \(lines), distance: \(distance) twips"
@@ -7780,6 +8091,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let style = args["style"]?.stringValue ?? "single"
         let color = args["color"]?.stringValue ?? "000000"
@@ -7815,7 +8128,7 @@ class WordMCPServer {
             doc.body.children[actualIndex] = .paragraph(para)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Horizontal line added below paragraph \(paragraphIndex) (style: \(style), color: #\(color), size: \(size))"
     }
@@ -7827,6 +8140,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let enable = args["enable"]?.boolValue ?? true
         let paragraphIndex = args["paragraph_index"]?.intValue
@@ -7848,7 +8163,7 @@ class WordMCPServer {
                 doc.body.children[actualIndex] = .paragraph(para)
             }
 
-            openDocuments[docId] = doc
+            try await storeDocument(doc, for: docId)
             return "Widow/orphan control \(enable ? "enabled" : "disabled") for paragraph \(pIndex)"
         } else {
             let paragraphIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
@@ -7863,7 +8178,7 @@ class WordMCPServer {
                 }
             }
 
-            openDocuments[docId] = doc
+            try await storeDocument(doc, for: docId)
             return "Widow/orphan control \(enable ? "enabled" : "disabled") for all paragraphs"
         }
     }
@@ -7878,6 +8193,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let enable = args["enable"]?.boolValue ?? true
 
@@ -7896,7 +8213,7 @@ class WordMCPServer {
             doc.body.children[actualIndex] = .paragraph(para)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Keep with next \(enable ? "enabled" : "disabled") for paragraph \(paragraphIndex)"
     }
@@ -8079,6 +8396,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let captionText = args["caption_text"]?.stringValue ?? ""
         let position = args["position"]?.stringValue ?? "below"
         let includeChapterNumber = args["include_chapter_number"]?.boolValue ?? false
@@ -8108,7 +8427,7 @@ class WordMCPServer {
 
         let insertIndex = position == "above" ? paragraphIndex : paragraphIndex + 1
         doc.insertParagraph(captionPara, at: insertIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Caption inserted: \(label) \(position) paragraph \(paragraphIndex)"
     }
@@ -8161,6 +8480,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let includePageNumbers = args["include_page_numbers"]?.boolValue ?? true
         let rightAlignPageNumbers = args["right_align_page_numbers"]?.boolValue ?? true
         let tabLeader = args["tab_leader"]?.stringValue ?? "dot"
@@ -8179,7 +8500,7 @@ class WordMCPServer {
         }
 
         doc.insertParagraph(tocPara, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         var result = "Table of \(captionLabel)s inserted at paragraph \(paragraphIndex)"
         result += " (page numbers: \(includePageNumbers)"
@@ -8243,6 +8564,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let columns = min(max(args["columns"]?.intValue ?? 2, 1), 4)
         let rightAlignPageNumbers = args["right_align_page_numbers"]?.boolValue ?? true
         let tabLeader = args["tab_leader"]?.stringValue ?? "dot"
@@ -8257,7 +8580,7 @@ class WordMCPServer {
         indexPara.properties.style = "Index"
 
         doc.insertParagraph(indexPara, at: paragraphIndex)
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         var result = "Index inserted at paragraph \(paragraphIndex)"
         result += " (\(columns) columns"
@@ -8314,6 +8637,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let enable = args["enable"]?.boolValue ?? true
 
         let paragraphIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
@@ -8331,7 +8656,7 @@ class WordMCPServer {
             doc.body.children[actualIndex] = .paragraph(para)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Keep lines together \(enable ? "enabled" : "disabled") for paragraph \(paragraphIndex)"
     }
@@ -8396,6 +8721,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let enable = args["enable"]?.boolValue ?? true
 
         let paragraphIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
@@ -8413,7 +8740,7 @@ class WordMCPServer {
             doc.body.children[actualIndex] = .paragraph(para)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Page break before \(enable ? "enabled" : "disabled") for paragraph \(paragraphIndex)"
     }
@@ -8456,6 +8783,8 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
         let paragraphIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
             if case .paragraph = child { return i }
             return nil
@@ -8471,7 +8800,7 @@ class WordMCPServer {
             doc.body.children[actualIndex] = .paragraph(para)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Continuous section break inserted after paragraph \(paragraphIndex)"
     }
@@ -8514,6 +8843,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let position = args["position"]?.stringValue ?? "end"
         let rowIndex = args["row_index"]?.intValue
@@ -8560,7 +8891,7 @@ class WordMCPServer {
             doc.body.children[actualIndex] = .table(tbl)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Row added to table \(tableIndex) at position '\(position)'"
     }
@@ -8575,6 +8906,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let position = args["position"]?.stringValue ?? "end"
         let colIndex = args["col_index"]?.intValue
@@ -8611,7 +8944,7 @@ class WordMCPServer {
             doc.body.children[actualIndex] = .table(tbl)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Column added to table \(tableIndex) at position '\(position)'"
     }
@@ -8629,6 +8962,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let tableIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
             if case .table = child { return i }
@@ -8649,7 +8984,7 @@ class WordMCPServer {
             doc.body.children[actualIndex] = .table(tbl)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Row \(rowIndex) deleted from table \(tableIndex)"
     }
@@ -8667,6 +9002,8 @@ class WordMCPServer {
         guard var doc = openDocuments[docId] else {
             throw WordError.documentNotFound(docId)
         }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let tableIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
             if case .table = child { return i }
@@ -8688,7 +9025,7 @@ class WordMCPServer {
             doc.body.children[actualIndex] = .table(tbl)
         }
 
-        openDocuments[docId] = doc
+        try await storeDocument(doc, for: docId)
 
         return "Column \(colIndex) deleted from table \(tableIndex)"
     }

@@ -17,55 +17,69 @@ Use `che-word-mcp` when you need to:
 ### Reading Documents
 
 ```text
-1. open_document(path: "/path/to/document.docx")
+1. open_document(path: "/path/to/document.docx", doc_id: "report")
    → Returns document ID
+   → Track changes is enabled by default for edits
 
-2. get_text(documentId: "...")
+2. get_text(source_path: "/path/to/document.docx")
    → Returns plain text content
 
    OR
 
-   get_paragraphs(documentId: "...")
+   get_paragraphs(doc_id: "report")
    → Returns paragraphs with formatting info
 
-3. close_document(documentId: "...")
-   → Clean up when done
+3. save_document(doc_id: "report")
+   → Reuses the original opened path when possible
+
+4. close_document(doc_id: "report")
+   → Only works when there are no unsaved changes
 ```
 
 ### Creating Documents
 
 ```text
-1. create_document(name: "my_document")
+1. create_document(doc_id: "my_document")
    → Returns document ID
+   → Track changes is enabled by default for edits
 
-2. insert_paragraph(documentId: "...", text: "Hello World", style: "Heading1")
-   insert_table(documentId: "...", rows: 3, cols: 4, data: [...])
-   insert_image(documentId: "...", path: "/path/to/image.png")
+2. insert_paragraph(doc_id: "...", text: "Hello World", style: "Heading1")
+   insert_table(doc_id: "...", rows: 3, cols: 4, data: [...])
+   insert_image_from_path(doc_id: "...", path: "/path/to/image.png", width: 320, height: 200)
 
-3. save_document(documentId: "...", path: "/path/to/output.docx")
+3. save_document(doc_id: "...", path: "/path/to/output.docx")
+4. close_document(doc_id: "...")
 ```
 
 ### Modifying Documents
 
 ```text
-1. open_document(path: "/path/to/document.docx")
+1. open_document(path: "/path/to/document.docx", doc_id: "report")
 
-2. update_paragraph(documentId: "...", index: 0, text: "New content")
-   format_text(documentId: "...", paragraphIndex: 0, bold: true)
-   insert_comment(documentId: "...", paragraphIndex: 0, author: "Claude", text: "Review needed")
+2. update_paragraph(doc_id: "report", index: 0, text: "New content")
+   format_text(doc_id: "report", paragraph_index: 0, bold: true)
+   insert_comment(doc_id: "report", paragraph_index: 0, author: "Claude", text: "Review needed")
 
-3. save_document(documentId: "...", path: "/path/to/output.docx")
+3. save_document(doc_id: "report")
+4. close_document(doc_id: "report")
 ```
 
 ### Exporting
 
 ```text
-export_text(documentId: "...")
+export_text(doc_id: "...")
 → Returns plain text
 
-export_markdown(documentId: "...")
+export_markdown(source_path: "/path/to/document.docx", path: "/path/to/output.md")
 → Returns Markdown format
 ```
+
+## Safety Rules
+
+- Do not assume in-memory edits are persisted until `save_document` succeeds.
+- If `close_document` returns an unsaved-changes error, call `save_document` or ask the user whether it should be saved now.
+- Prefer `save_document(doc_id: "...")` after `open_document(...)` so the server can reuse the original path safely.
+- Use `open_document(..., autosave: true)` only when save-after-each-edit is explicitly desired.
 
 ## Tool Categories
 

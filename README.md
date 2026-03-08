@@ -109,7 +109,14 @@ Core workflow:
 1. `open_document` - Open an existing .docx file
 2. `get_text` / `get_paragraphs` - Read document content
 3. `insert_paragraph` / `format_text` - Modify content
-4. `save_document` - Save changes
+4. `save_document` - Save changes back to disk
+5. `close_document` - Close only after save succeeds
+
+Safety behavior:
+- Track changes is enabled by default for editable documents
+- `save_document` can reuse the original opened path when `path` is omitted
+- `close_document` returns an error if there are unsaved changes
+- `open_document(..., autosave: true)` enables save-after-each-edit for docs with a known backing path
 
 Creating new documents:
 1. `create_document` - Create new document
@@ -146,8 +153,8 @@ cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 |------|-------------|
 | `create_document` | Create a new Word document |
 | `open_document` | Open an existing .docx file |
-| `save_document` | Save document to .docx file |
-| `close_document` | Close an open document |
+| `save_document` | Save document to a path, or reuse the original opened path when available |
+| `close_document` | Close an open document; errors if there are unsaved changes |
 | `list_open_documents` | List all open documents |
 | `get_document_info` | Get document statistics |
 
