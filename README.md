@@ -9,7 +9,7 @@ Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this
 - **Pure Swift Implementation**: No Node.js, Python, or external runtime required
 - **Direct OOXML Manipulation**: Works directly with XML, no Microsoft Word installation needed
 - **Single Binary**: Just one executable file
-- **148 MCP Tools**: Comprehensive document manipulation capabilities
+- **147 MCP Tools**: Comprehensive document manipulation capabilities
 - **Complete OOXML Support**: Full support for tables, styles, images, headers/footers, comments, footnotes, and more
 - **Cross-platform**: Works on macOS (and potentially other platforms supporting Swift)
 
@@ -148,7 +148,7 @@ Or copy from the repository:
 cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 ```
 
-## Available Tools (148 Total)
+## Available Tools (147 Total)
 
 ### Document Management (8 tools)
 
