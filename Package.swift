@@ -5,7 +5,7 @@ let package = Package(
     name: "CheWordMCP",
     platforms: [.macOS(.v13)],
     dependencies: [
-        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.11.0"),
+        .package(path: "Vendor/swift-sdk"),
         .package(url: "https://github.com/kiki830621/ooxml-swift.git", from: "0.5.1"),
         .package(url: "https://github.com/kiki830621/word-to-md-swift.git", from: "0.3.0"),
     ],
@@ -17,6 +17,10 @@ let package = Package(
                 .product(name: "OOXMLSwift", package: "ooxml-swift"),
                 .product(name: "WordToMDSwift", package: "word-to-md-swift"),
             ]
+        ),
+        .testTarget(
+            name: "CheWordMCPTests",
+            dependencies: ["CheWordMCP"]
         )
     ]
 )
