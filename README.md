@@ -54,7 +54,7 @@ chmod +x ~/bin/CheWordMCP
 #### Prerequisites
 
 - macOS 13.0+ (Ventura or later)
-- Swift 5.9+
+- Swift 6.1+
 
 ```bash
 git clone https://github.com/ildunari/che-word-mcp-eng.git
