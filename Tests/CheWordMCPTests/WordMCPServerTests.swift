@@ -62,6 +62,54 @@ final class WordMCPServerTests: XCTestCase {
         XCTAssertTrue(server.isDocumentDirtyForTesting("doc"))
     }
 
+    func testDuplicateDocIdIsRejectedBeforeOverwrite() async {
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "create_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "text": .string("Unsaved draft")
+            ]
+        )
+
+        let duplicateCreate = await server.invokeToolForTesting(
+            name: "create_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        XCTAssertEqual(duplicateCreate.isError, true)
+        XCTAssertTrue(resultText(duplicateCreate).contains("Document already open"))
+        XCTAssertTrue(server.isDocumentDirtyForTesting("doc"))
+    }
+
+    func testNewDocumentRequiresExplicitPathForFirstSave() async {
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "create_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "text": .string("Hello")
+            ]
+        )
+
+        let saveResult = await server.invokeToolForTesting(
+            name: "save_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        XCTAssertEqual(saveResult.isError, true)
+        XCTAssertTrue(resultText(saveResult).contains("No path was provided"))
+        XCTAssertTrue(server.isDocumentDirtyForTesting("doc"))
+    }
+
     func testSaveDocumentWithoutPathUsesOriginalOpenedPath() async throws {
         let url = tempURL("save-fallback")
         try writeDocument(text: "Before", to: url)
@@ -146,5 +194,24 @@ final class WordMCPServerTests: XCTestCase {
 
         XCTAssertFalse(server.isDocumentDirtyForTesting("doc"))
         XCTAssertTrue(try readDocumentText(from: url).contains("Needs flush"))
+    }
+
+    func testShutdownFlushSkipsDirtyNewDocumentWithoutKnownPath() async {
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "create_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "text": .string("Unsaved new doc")
+            ]
+        )
+
+        await server.flushDirtyDocumentsForTesting()
+
+        XCTAssertTrue(server.isDocumentDirtyForTesting("doc"))
     }
 }

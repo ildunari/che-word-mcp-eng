@@ -4169,6 +4169,9 @@ class WordMCPServer {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
         }
+        if openDocuments[docId] != nil {
+            throw WordError.documentAlreadyOpen(docId)
+        }
 
         let autosave = args["autosave"]?.boolValue ?? false
         var doc = WordDocument()
@@ -4184,6 +4187,9 @@ class WordMCPServer {
         }
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
+        }
+        if openDocuments[docId] != nil {
+            throw WordError.documentAlreadyOpen(docId)
         }
         let autosave = args["autosave"]?.boolValue ?? false
 
