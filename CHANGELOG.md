@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-03-08
+
+### Added
+- `finalize_document` — save and close a document in one guarded step, reusing the original opened path when available
+
+### Changed
+- Document editing sessions now reject duplicate `doc_id` reuse instead of silently overwriting active in-memory work
+- Track-changes-first document lifecycle now includes safer finalize guidance in the bundled skill and README
+
+### Fixed
+- `save_document` / shutdown safety coverage expanded with regression tests for duplicate IDs, first-save path enforcement, and dirty-doc flush behavior
+
 ## [1.15.2] - 2026-03-07
 
 ### Improved

@@ -24,7 +24,7 @@ lipo -create \
   -output mcpb/server/CheWordMCP
 
 # Create .mcpb package
-cd mcpb && zip -r ../che-word-mcp.mcpb . && cd ..
+cd mcpb && zip -r che-word-mcp.mcpb manifest.json README.md PRIVACY.md server
 ```
 
 ## Installation

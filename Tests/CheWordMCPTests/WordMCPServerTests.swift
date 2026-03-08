@@ -214,4 +214,59 @@ final class WordMCPServerTests: XCTestCase {
 
         XCTAssertTrue(server.isDocumentDirtyForTesting("doc"))
     }
+
+    func testFinalizeDocumentSavesAndClosesUsingOriginalPath() async throws {
+        let url = tempURL("finalize-opened")
+        try writeDocument(text: "Before finalize", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "text": .string("Finalize me")
+            ]
+        )
+
+        let finalizeResult = await server.invokeToolForTesting(
+            name: "finalize_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        XCTAssertEqual(finalizeResult.isError, nil)
+        XCTAssertTrue(resultText(finalizeResult).contains("Finalized document"))
+        XCTAssertNil(server.isTrackChangesEnabledForTesting("doc"))
+        XCTAssertTrue(try readDocumentText(from: url).contains("Finalize me"))
+    }
+
+    func testFinalizeDocumentRequiresExplicitPathForNewDocument() async {
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "create_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "text": .string("Needs first path")
+            ]
+        )
+
+        let finalizeResult = await server.invokeToolForTesting(
+            name: "finalize_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        XCTAssertEqual(finalizeResult.isError, true)
+        XCTAssertTrue(resultText(finalizeResult).contains("No path was provided"))
+        XCTAssertTrue(server.isDocumentDirtyForTesting("doc"))
+    }
 }

@@ -1,6 +1,6 @@
 # che-word-mcp
 
-A Swift-native MCP server for Microsoft Word (.docx) document manipulation. Provides 146 tools for reading, writing, and modifying Word documents without requiring Microsoft Word installation.
+A Swift-native MCP server for Microsoft Word (.docx) document manipulation. Provides 147 tools for reading, writing, and modifying Word documents without requiring Microsoft Word installation.
 
 ## When to Use
 
@@ -29,11 +29,8 @@ Use `che-word-mcp` when you need to:
    get_paragraphs(doc_id: "report")
    → Returns paragraphs with formatting info
 
-3. save_document(doc_id: "report")
-   → Reuses the original opened path when possible
-
-4. close_document(doc_id: "report")
-   → Only works when there are no unsaved changes
+3. finalize_document(doc_id: "report")
+   → Saves and closes using the original opened path when possible
 ```
 
 ### Creating Documents
@@ -47,8 +44,7 @@ Use `che-word-mcp` when you need to:
    insert_table(doc_id: "...", rows: 3, cols: 4, data: [...])
    insert_image_from_path(doc_id: "...", path: "/path/to/image.png", width: 320, height: 200)
 
-3. save_document(doc_id: "...", path: "/path/to/output.docx")
-4. close_document(doc_id: "...")
+3. finalize_document(doc_id: "...", path: "/path/to/output.docx")
 ```
 
 ### Modifying Documents
@@ -60,8 +56,7 @@ Use `che-word-mcp` when you need to:
    format_text(doc_id: "report", paragraph_index: 0, bold: true)
    insert_comment(doc_id: "report", paragraph_index: 0, author: "Claude", text: "Review needed")
 
-3. save_document(doc_id: "report")
-4. close_document(doc_id: "report")
+3. finalize_document(doc_id: "report")
 ```
 
 ### Exporting
@@ -77,6 +72,7 @@ export_markdown(source_path: "/path/to/document.docx", path: "/path/to/output.md
 ## Safety Rules
 
 - Do not assume in-memory edits are persisted until `save_document` succeeds.
+- Prefer `finalize_document` when the task is done and you want the file safely written and closed in one step.
 - If `close_document` returns an unsaved-changes error, call `save_document` or ask the user whether it should be saved now.
 - Prefer `save_document(doc_id: "...")` after `open_document(...)` so the server can reuse the original path safely.
 - Use `open_document(..., autosave: true)` only when save-after-each-edit is explicitly desired.

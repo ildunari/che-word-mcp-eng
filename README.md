@@ -9,7 +9,7 @@ Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this
 - **Pure Swift Implementation**: No Node.js, Python, or external runtime required
 - **Direct OOXML Manipulation**: Works directly with XML, no Microsoft Word installation needed
 - **Single Binary**: Just one executable file
-- **146 MCP Tools**: Comprehensive document manipulation capabilities
+- **147 MCP Tools**: Comprehensive document manipulation capabilities
 - **Complete OOXML Support**: Full support for tables, styles, images, headers/footers, comments, footnotes, and more
 - **Cross-platform**: Works on macOS (and potentially other platforms supporting Swift)
 
@@ -17,6 +17,7 @@ Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.16.0 | 2026-03-08 | Add `finalize_document`, safer document-session lifecycle, and fork-owned release packaging cleanup |
 | v1.15.2 | 2026-03-07 | Improve `list_all_formatted_text` tool description for better LLM parameter handling |
 | v1.15.1 | 2026-03-01 | Fix heading heuristic style fallback (resolve fontSize from style inheritance chain) |
 | v1.15.0 | 2026-03-01 | Practical Mode: EMF→PNG auto-conversion + heading heuristic for style-less documents |
@@ -145,9 +146,9 @@ Or copy from the repository:
 cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 ```
 
-## Available Tools (146 Total)
+## Available Tools (147 Total)
 
-### Document Management (6 tools)
+### Document Management (7 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -155,6 +156,7 @@ cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 | `open_document` | Open an existing .docx file |
 | `save_document` | Save document to a path, or reuse the original opened path when available |
 | `close_document` | Close an open document; errors if there are unsaved changes |
+| `finalize_document` | Save and close in one guarded step, reusing the original path when available |
 | `list_open_documents` | List all open documents |
 | `get_document_info` | Get document statistics |
 

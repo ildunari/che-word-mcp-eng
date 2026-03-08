@@ -20,7 +20,7 @@ class WordMCPServer {
     init() async {
         self.server = Server(
             name: "che-word-mcp",
-            version: "1.15.2",
+            version: "1.16.0",
             capabilities: .init(tools: .init())
         )
         self.transport = StdioTransport()
@@ -234,6 +234,24 @@ class WordMCPServer {
                         "doc_id": .object([
                             "type": .string("string"),
                             "description": .string("file identification code")
+                        ])
+                    ]),
+                    "required": .array([.string("doc_id")])
+                ])
+            ),
+            Tool(
+                name: "finalize_document",
+                description: "Save the document and close it in one guarded step. Reuses the original opened path when available.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("file identification code")
+                        ]),
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Optional save path. If omitted, the original opened path is reused when available.")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -3853,6 +3871,8 @@ class WordMCPServer {
             return try await saveDocument(args: args)
         case "close_document":
             return try await closeDocument(args: args)
+        case "finalize_document":
+            return try await finalizeDocument(args: args)
         case "list_open_documents":
             return await listOpenDocuments()
         case "get_document_info":
@@ -4246,6 +4266,22 @@ class WordMCPServer {
 
         removeSession(docId: docId)
         return "Closed document: \(docId)"
+    }
+
+    private func finalizeDocument(args: [String: Value]) async throws -> String {
+        guard let docId = args["doc_id"]?.stringValue else {
+            throw WordError.missingParameter("doc_id")
+        }
+        guard let doc = openDocuments[docId] else {
+            throw WordError.documentNotFound(docId)
+        }
+
+        let explicitPath = args["path"]?.stringValue
+        let path = try effectiveSavePath(for: docId, explicitPath: explicitPath)
+        try persistDocumentToDisk(doc, docId: docId, path: path)
+        removeSession(docId: docId)
+
+        return "Finalized document '\(docId)' to: \(path)"
     }
 
     private func listOpenDocuments() async -> String {

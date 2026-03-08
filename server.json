@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.ildunari/che-word-mcp-eng",
-  "description": "Swift-native MCP server for Word (.docx) manipulation with 105 tools",
-  "version": "1.8.0",
+  "description": "Swift-native MCP server for Word (.docx) manipulation with 147 tools",
+  "version": "1.16.0",
   "repository": {
     "url": "https://github.com/ildunari/che-word-mcp-eng",
     "source": "github"
@@ -10,12 +10,12 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/ildunari/che-word-mcp-eng/releases/download/v1.8.0/CheWordMCP",
-      "version": "1.8.0",
+      "identifier": "https://github.com/ildunari/che-word-mcp-eng/releases/download/v1.16.0/che-word-mcp.mcpb",
+      "version": "1.16.0",
       "transport": {
         "type": "stdio"
       },
-      "fileSha256": "6e93d0686cbe5e191cf56053b62c03cd36433e10b6670cf85160d89a233f188a"
+      "fileSha256": "a73a09c63abd8001a7c824d007986c30e8967891a2b130f833105d680be2777d"
     }
   ]
 }

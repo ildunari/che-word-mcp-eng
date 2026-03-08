@@ -6,7 +6,7 @@
 che-word-mcp-eng/
 ├── Sources/
 │   └── CheWordMCP/
-│       └── Server.swift          # MCP server entry point (146 tools)
+│       └── Server.swift          # MCP server entry point (147 tools)
 ├── mcpb/                         # MCPB packaging directory
 │   ├── manifest.json             # MCPB manifest
 │   ├── server/
