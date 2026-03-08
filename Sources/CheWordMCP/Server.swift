@@ -4,15 +4,12 @@ import OOXMLSwift
 import WordToMDSwift
 import DocConverterSwift
 
-/// Word MCP Server - Swift OOXML Word 文件處理
 class WordMCPServer {
     private let server: Server
     private let transport: StdioTransport
 
-    /// 目前開啟的文件 (doc_id -> WordDocument)
     private var openDocuments: [String: WordDocument] = [:]
 
-    /// Word → Markdown 轉換器（嵌入 word-to-md-swift library）
     private let wordConverter = WordConverter()
 
     init() async {
@@ -23,27 +20,22 @@ class WordMCPServer {
         )
         self.transport = StdioTransport()
 
-        // 註冊 Tool handlers
         await registerToolHandlers()
     }
 
     func run() async throws {
-        // 啟動 server
         try await server.start(transport: transport)
 
-        // 等待完成
         await server.waitUntilCompleted()
     }
 
     private func registerToolHandlers() async {
         let tools = allTools
 
-        // 列出所有工具
         await server.withMethodHandler(ListTools.self) { [tools] _ in
             ListTools.Result(tools: tools)
         }
 
-        // 處理工具呼叫
         await server.withMethodHandler(CallTool.self) { [weak self] params in
             guard let self = self else {
                 return CallTool.Result(content: [.text("Server unavailable")], isError: true)
@@ -56,16 +48,15 @@ class WordMCPServer {
 
     private var allTools: [Tool] {
         [
-            // 文件管理
             Tool(
                 name: "create_document",
-                description: "建立新的 Word 文件 (.docx)",
+                description: "Create a new Word document (.docx)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼，用於後續操作")
+                            "description": .string("File identification code for subsequent operations")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -73,17 +64,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "open_document",
-                description: "開啟現有的 Word 文件 (.docx)",
+                description: "Open an existing Word file (.docx)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "path": .object([
                             "type": .string("string"),
-                            "description": .string("文件路徑")
+                            "description": .string("file path")
                         ]),
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼，用於後續操作")
+                            "description": .string("File identification code for subsequent operations")
                         ])
                     ]),
                     "required": .array([.string("path"), .string("doc_id")])
@@ -91,17 +82,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "save_document",
-                description: "儲存 Word 文件 (.docx)",
+                description: "Save Word document (.docx)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "path": .object([
                             "type": .string("string"),
-                            "description": .string("儲存路徑")
+                            "description": .string("storage path")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("path")])
@@ -109,13 +100,13 @@ class WordMCPServer {
             ),
             Tool(
                 name: "close_document",
-                description: "關閉已開啟的文件",
+                description: "Close an open file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -123,7 +114,7 @@ class WordMCPServer {
             ),
             Tool(
                 name: "list_open_documents",
-                description: "列出所有已開啟的文件",
+                description: "List all open files",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([:])
@@ -131,29 +122,28 @@ class WordMCPServer {
             ),
             Tool(
                 name: "get_document_info",
-                description: "取得文件資訊（段落數、字數等）",
+                description: "Get document information (number of paragraphs, number of words, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 內容操作
             Tool(
                 name: "get_text",
-                description: "取得 .docx 檔案的純文字內容（Direct Mode, Tier 1）",
+                description: "Get the plain text content of a .docx file (Direct Mode, Tier 1)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "source_path": .object([
                             "type": .string("string"),
-                            "description": .string("來源 .docx 檔案路徑")
+                            "description": .string("Source .docx file path")
                         ])
                     ]),
                     "required": .array([.string("source_path")])
@@ -161,13 +151,13 @@ class WordMCPServer {
             ),
             Tool(
                 name: "get_paragraphs",
-                description: "取得所有段落（含格式資訊）",
+                description: "Get all paragraphs (including formatting information)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -175,25 +165,25 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_paragraph",
-                description: "插入新段落",
+                description: "insert new paragraph",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("段落文字內容")
+                            "description": .string("Paragraph text content")
                         ]),
                         "index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置（從 0 開始），不指定則加到最後")
+                            "description": .string("Insertion position (starting from 0), if not specified, add to the end")
                         ]),
                         "style": .object([
                             "type": .string("string"),
-                            "description": .string("段落樣式（如 Heading1, Normal）")
+                            "description": .string("Paragraph style (such as Heading1, Normal)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("text")])
@@ -201,21 +191,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "update_paragraph",
-                description: "更新現有段落的內容",
+                description: "Update the content of an existing paragraph",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("新的段落文字")
+                            "description": .string("new paragraph text")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("index"), .string("text")])
@@ -223,17 +213,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "delete_paragraph",
-                description: "刪除段落",
+                description: "delete paragraph",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("index")])
@@ -241,69 +231,68 @@ class WordMCPServer {
             ),
             Tool(
                 name: "replace_text",
-                description: "搜尋並取代文字",
+                description: "Search and replace text",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "find": .object([
                             "type": .string("string"),
-                            "description": .string("要搜尋的文字")
+                            "description": .string("text to search for")
                         ]),
                         "replace": .object([
                             "type": .string("string"),
-                            "description": .string("取代後的文字")
+                            "description": .string("Replaced text")
                         ]),
                         "all": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否取代所有符合項目（預設 true）")
+                            "description": .string("Whether to replace all matching items (default true)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("find"), .string("replace")])
                 ])
             ),
 
-            // 格式化
             Tool(
                 name: "format_text",
-                description: "格式化指定段落的文字（粗體、斜體、顏色等）",
+                description: "Format the text of the specified paragraph (bold, italics, color, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引")
+                            "description": .string("paragraph index")
                         ]),
                         "bold": .object([
                             "type": .string("boolean"),
-                            "description": .string("粗體")
+                            "description": .string("Bold")
                         ]),
                         "italic": .object([
                             "type": .string("boolean"),
-                            "description": .string("斜體")
+                            "description": .string("italics")
                         ]),
                         "underline": .object([
                             "type": .string("boolean"),
-                            "description": .string("底線")
+                            "description": .string("bottom line")
                         ]),
                         "font_size": .object([
                             "type": .string("integer"),
-                            "description": .string("字型大小（點數，如 12）")
+                            "description": .string("Font size (points, e.g. 12)")
                         ]),
                         "font_name": .object([
                             "type": .string("string"),
-                            "description": .string("字型名稱（如 Arial, Times New Roman）")
+                            "description": .string("Font name (e.g. Arial, Times New Roman)")
                         ]),
                         "color": .object([
                             "type": .string("string"),
-                            "description": .string("文字顏色（RGB 十六進位，如 FF0000 表示紅色）")
+                            "description": .string("Text color (RGB hexadecimal, such as FF0000 means red)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
@@ -311,33 +300,33 @@ class WordMCPServer {
             ),
             Tool(
                 name: "set_paragraph_format",
-                description: "設定段落格式（對齊、間距等）",
+                description: "Format paragraphs (alignment, spacing, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引")
+                            "description": .string("paragraph index")
                         ]),
                         "alignment": .object([
                             "type": .string("string"),
-                            "description": .string("對齊方式：left, center, right, both")
+                            "description": .string("Alignment: left, center, right, both")
                         ]),
                         "line_spacing": .object([
                             "type": .string("number"),
-                            "description": .string("行距（倍數，如 1.5）")
+                            "description": .string("Line spacing (multiple, such as 1.5)")
                         ]),
                         "space_before": .object([
                             "type": .string("integer"),
-                            "description": .string("段前間距（點數）")
+                            "description": .string("Spacing before paragraph (number of points)")
                         ]),
                         "space_after": .object([
                             "type": .string("integer"),
-                            "description": .string("段後間距（點數）")
+                            "description": .string("Spacing after paragraph (number of points)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
@@ -345,53 +334,52 @@ class WordMCPServer {
             ),
             Tool(
                 name: "apply_style",
-                description: "套用內建樣式到段落",
+                description: "Apply built-in styles to paragraphs",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引")
+                            "description": .string("paragraph index")
                         ]),
                         "style": .object([
                             "type": .string("string"),
-                            "description": .string("樣式名稱（如 Heading1, Heading2, Normal, Title）")
+                            "description": .string("Style name (such as Heading1, Heading2, Normal, Title)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("style")])
                 ])
             ),
 
-            // 表格
             Tool(
                 name: "insert_table",
-                description: "插入表格",
+                description: "Insert table",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "rows": .object([
                             "type": .string("integer"),
-                            "description": .string("列數")
+                            "description": .string("Number of columns")
                         ]),
                         "cols": .object([
                             "type": .string("integer"),
-                            "description": .string("欄數")
+                            "description": .string("Number of columns")
                         ]),
                         "data": .object([
                             "type": .string("array"),
-                            "description": .string("表格資料（二維陣列）")
+                            "description": .string("Tabular data (two-dimensional array)")
                         ]),
                         "index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置")
+                            "description": .string("insertion position")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("rows"), .string("cols")])
@@ -399,13 +387,13 @@ class WordMCPServer {
             ),
             Tool(
                 name: "get_tables",
-                description: "取得文件中所有表格的資訊",
+                description: "Get information about all tables in the document",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -413,29 +401,29 @@ class WordMCPServer {
             ),
             Tool(
                 name: "update_cell",
-                description: "更新表格儲存格內容",
+                description: "Update table cell contents",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "row": .object([
                             "type": .string("integer"),
-                            "description": .string("列索引（從 0 開始）")
+                            "description": .string("Column index (starting from 0)")
                         ]),
                         "col": .object([
                             "type": .string("integer"),
-                            "description": .string("欄索引（從 0 開始）")
+                            "description": .string("Column index (starting from 0)")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("新的儲存格內容")
+                            "description": .string("New cell contents")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index"), .string("row"), .string("col"), .string("text")])
@@ -443,17 +431,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "delete_table",
-                description: "刪除指定的表格",
+                description: "Delete specified table",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index")])
@@ -461,37 +449,37 @@ class WordMCPServer {
             ),
             Tool(
                 name: "merge_cells",
-                description: "合併表格儲存格（支援水平或垂直合併）",
+                description: "Merge table cells (supports horizontal or vertical merging)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "direction": .object([
                             "type": .string("string"),
-                            "description": .string("合併方向：horizontal（水平）或 vertical（垂直）")
+                            "description": .string("Merge direction: horizontal or vertical")
                         ]),
                         "row": .object([
                             "type": .string("integer"),
-                            "description": .string("水平合併時：目標列索引；垂直合併時：起始列")
+                            "description": .string("When merging horizontally: target column index; when merging vertically: starting column")
                         ]),
                         "col": .object([
                             "type": .string("integer"),
-                            "description": .string("水平合併時：起始欄；垂直合併時：目標欄索引")
+                            "description": .string("When merging horizontally: starting column; when merging vertically: target column index")
                         ]),
                         "end_row": .object([
                             "type": .string("integer"),
-                            "description": .string("垂直合併時的結束列索引")
+                            "description": .string("Ending column index when merging vertically")
                         ]),
                         "end_col": .object([
                             "type": .string("integer"),
-                            "description": .string("水平合併時的結束欄索引")
+                            "description": .string("End column index when merging horizontally")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index"), .string("direction")])
@@ -499,57 +487,56 @@ class WordMCPServer {
             ),
             Tool(
                 name: "set_table_style",
-                description: "設定表格樣式（邊框、儲存格底色）",
+                description: "Set table style (border, cell background color)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "border_style": .object([
                             "type": .string("string"),
-                            "description": .string("邊框樣式：single, double, dashed, dotted, none")
+                            "description": .string("Border style: single, double, dashed, dotted, none")
                         ]),
                         "border_color": .object([
                             "type": .string("string"),
-                            "description": .string("邊框顏色（RGB 十六進位，如 000000）")
+                            "description": .string("Border color (RGB hexadecimal, such as 000000)")
                         ]),
                         "border_size": .object([
                             "type": .string("integer"),
-                            "description": .string("邊框寬度（1/8 點，預設 4 = 0.5pt）")
+                            "description": .string("Border width (1/8 point, default 4 = 0.5pt)")
                         ]),
                         "cell_row": .object([
                             "type": .string("integer"),
-                            "description": .string("設定底色的儲存格列索引（可選）")
+                            "description": .string("Set the cell index of the background color (optional)")
                         ]),
                         "cell_col": .object([
                             "type": .string("integer"),
-                            "description": .string("設定底色的儲存格欄索引（可選）")
+                            "description": .string("Set the cell column index of the background color (optional)")
                         ]),
                         "shading_color": .object([
                             "type": .string("string"),
-                            "description": .string("儲存格底色（RGB 十六進位，如 FFFF00）")
+                            "description": .string("Cell background color (RGB hexadecimal, such as FFFF00)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index")])
                 ])
             ),
 
-            // 樣式管理
             Tool(
                 name: "list_styles",
-                description: "列出文件中所有可用的樣式",
+                description: "List all styles available in the file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -557,65 +544,65 @@ class WordMCPServer {
             ),
             Tool(
                 name: "create_style",
-                description: "建立自訂樣式",
+                description: "Create custom styles",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "style_id": .object([
                             "type": .string("string"),
-                            "description": .string("樣式 ID（唯一識別碼）")
+                            "description": .string("Style ID (unique identifier)")
                         ]),
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("樣式顯示名稱")
+                            "description": .string("style display name")
                         ]),
                         "type": .object([
                             "type": .string("string"),
-                            "description": .string("樣式類型：paragraph, character, table, numbering")
+                            "description": .string("Style type: paragraph, character, table, numbering")
                         ]),
                         "based_on": .object([
                             "type": .string("string"),
-                            "description": .string("基於的樣式 ID（可選）")
+                            "description": .string("The style ID to base on (optional)")
                         ]),
                         "next_style": .object([
                             "type": .string("string"),
-                            "description": .string("下一段使用的樣式 ID（可選）")
+                            "description": .string("Style ID to use in the next paragraph (optional)")
                         ]),
                         "font_name": .object([
                             "type": .string("string"),
-                            "description": .string("字型名稱")
+                            "description": .string("Font name")
                         ]),
                         "font_size": .object([
                             "type": .string("integer"),
-                            "description": .string("字型大小（點數）")
+                            "description": .string("Font size (points)")
                         ]),
                         "bold": .object([
                             "type": .string("boolean"),
-                            "description": .string("粗體")
+                            "description": .string("Bold")
                         ]),
                         "italic": .object([
                             "type": .string("boolean"),
-                            "description": .string("斜體")
+                            "description": .string("italics")
                         ]),
                         "color": .object([
                             "type": .string("string"),
-                            "description": .string("文字顏色（RGB 十六進位）")
+                            "description": .string("Text color (RGB hexadecimal)")
                         ]),
                         "alignment": .object([
                             "type": .string("string"),
-                            "description": .string("對齊方式：left, center, right, both")
+                            "description": .string("Alignment: left, center, right, both")
                         ]),
                         "space_before": .object([
                             "type": .string("integer"),
-                            "description": .string("段前間距（點數）")
+                            "description": .string("Spacing before paragraph (number of points)")
                         ]),
                         "space_after": .object([
                             "type": .string("integer"),
-                            "description": .string("段後間距（點數）")
+                            "description": .string("Spacing after paragraph (number of points)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("style_id"), .string("name")])
@@ -623,45 +610,45 @@ class WordMCPServer {
             ),
             Tool(
                 name: "update_style",
-                description: "修改現有樣式的定義",
+                description: "Modify the definition of an existing style",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "style_id": .object([
                             "type": .string("string"),
-                            "description": .string("要修改的樣式 ID")
+                            "description": .string("Style ID to modify")
                         ]),
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("新的顯示名稱")
+                            "description": .string("new display name")
                         ]),
                         "font_name": .object([
                             "type": .string("string"),
-                            "description": .string("字型名稱")
+                            "description": .string("Font name")
                         ]),
                         "font_size": .object([
                             "type": .string("integer"),
-                            "description": .string("字型大小（點數）")
+                            "description": .string("Font size (points)")
                         ]),
                         "bold": .object([
                             "type": .string("boolean"),
-                            "description": .string("粗體")
+                            "description": .string("Bold")
                         ]),
                         "italic": .object([
                             "type": .string("boolean"),
-                            "description": .string("斜體")
+                            "description": .string("italics")
                         ]),
                         "color": .object([
                             "type": .string("string"),
-                            "description": .string("文字顏色（RGB 十六進位）")
+                            "description": .string("Text color (RGB hexadecimal)")
                         ]),
                         "alignment": .object([
                             "type": .string("string"),
-                            "description": .string("對齊方式")
+                            "description": .string("Alignment")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("style_id")])
@@ -669,41 +656,40 @@ class WordMCPServer {
             ),
             Tool(
                 name: "delete_style",
-                description: "刪除自訂樣式（不能刪除內建樣式）",
+                description: "Delete custom styles (built-in styles cannot be deleted)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "style_id": .object([
                             "type": .string("string"),
-                            "description": .string("要刪除的樣式 ID")
+                            "description": .string("Style ID to delete")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("style_id")])
                 ])
             ),
 
-            // 清單/編號
             Tool(
                 name: "insert_bullet_list",
-                description: "插入項目符號清單",
+                description: "Insert bulleted list",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "items": .object([
                             "type": .string("array"),
-                            "description": .string("清單項目（字串陣列）")
+                            "description": .string("List items (string array)")
                         ]),
                         "index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置（可選，不指定則加到最後）")
+                            "description": .string("Insertion position (optional, if not specified, it will be added to the end)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("items")])
@@ -711,21 +697,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_numbered_list",
-                description: "插入編號清單",
+                description: "Insert numbered list",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "items": .object([
                             "type": .string("array"),
-                            "description": .string("清單項目（字串陣列）")
+                            "description": .string("List items (string array)")
                         ]),
                         "index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置（可選，不指定則加到最後）")
+                            "description": .string("Insertion position (optional, if not specified, it will be added to the end)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("items")])
@@ -733,41 +719,40 @@ class WordMCPServer {
             ),
             Tool(
                 name: "set_list_level",
-                description: "設定清單項目的層級（0-8）",
+                description: "Set the level of list items (0-8)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引")
+                            "description": .string("paragraph index")
                         ]),
                         "level": .object([
                             "type": .string("integer"),
-                            "description": .string("層級（0-8，0 為最外層）")
+                            "description": .string("Level (0-8, 0 is the outermost level)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("level")])
                 ])
             ),
 
-            // 頁面設定
             Tool(
                 name: "set_page_size",
-                description: "設定頁面大小（letter, a4, legal, a3, a5, b5, executive）",
+                description: "Set page size (letter, a4, legal, a3, a5, b5, executive)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "size": .object([
                             "type": .string("string"),
-                            "description": .string("頁面大小：letter, a4, legal, a3, a5, b5, executive")
+                            "description": .string("Page sizes: letter, a4, legal, a3, a5, b5, executive")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("size")])
@@ -775,33 +760,33 @@ class WordMCPServer {
             ),
             Tool(
                 name: "set_page_margins",
-                description: "設定頁邊距",
+                description: "Set page margins",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "preset": .object([
                             "type": .string("string"),
-                            "description": .string("預設邊距：normal, narrow, moderate, wide（可選）")
+                            "description": .string("Default margins: normal, narrow, moderate, wide (optional)")
                         ]),
                         "top": .object([
                             "type": .string("integer"),
-                            "description": .string("上邊距（twips，1440 = 1 英寸）")
+                            "description": .string("Top margin (twips, 1440 = 1 inch)")
                         ]),
                         "right": .object([
                             "type": .string("integer"),
-                            "description": .string("右邊距（twips）")
+                            "description": .string("Right margin (twips)")
                         ]),
                         "bottom": .object([
                             "type": .string("integer"),
-                            "description": .string("下邊距（twips）")
+                            "description": .string("Bottom margin (twips)")
                         ]),
                         "left": .object([
                             "type": .string("integer"),
-                            "description": .string("左邊距（twips）")
+                            "description": .string("Left margin (twips)")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -809,17 +794,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "set_page_orientation",
-                description: "設定頁面方向（直向/橫向）",
+                description: "Set page orientation (portrait/landscape)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "orientation": .object([
                             "type": .string("string"),
-                            "description": .string("頁面方向：portrait（直向）, landscape（橫向）")
+                            "description": .string("Page orientation: portrait, landscape")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("orientation")])
@@ -827,17 +812,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_page_break",
-                description: "插入分頁符",
+                description: "Insert page break",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "at_index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置（段落索引，可選，預設插在文件最後）")
+                            "description": .string("Insertion position (paragraph index, optional, inserted at the end of the file by default)")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -845,45 +830,44 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_section_break",
-                description: "插入分節符（可設定不同的分節類型）",
+                description: "Insert section breaks (different section types can be set)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "type": .object([
                             "type": .string("string"),
-                            "description": .string("分節類型：nextPage（下一頁）, continuous（連續）, evenPage（偶數頁）, oddPage（奇數頁）")
+                            "description": .string("Section type: nextPage (next page), continuous (continuous), evenPage (even page), oddPage (odd page)")
                         ]),
                         "at_index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置（段落索引，可選）")
+                            "description": .string("insertion position (paragraph index, optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 頁首/頁尾
             Tool(
                 name: "add_header",
-                description: "新增頁首",
+                description: "Add header",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("頁首文字")
+                            "description": .string("Header text")
                         ]),
                         "type": .object([
                             "type": .string("string"),
-                            "description": .string("頁首類型：default（預設）, first（首頁）, even（偶數頁）")
+                            "description": .string("Header type: default (default), first (home page), even (even page)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("text")])
@@ -891,21 +875,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "update_header",
-                description: "更新頁首內容",
+                description: "Update top page content",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "header_id": .object([
                             "type": .string("string"),
-                            "description": .string("頁首 ID（從 add_header 返回）")
+                            "description": .string("Header ID (returned from add_header)")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("新的頁首文字")
+                            "description": .string("New header text")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("header_id"), .string("text")])
@@ -913,21 +897,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "add_footer",
-                description: "新增頁尾",
+                description: "Add footer",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("頁尾文字（可選，若不提供則使用頁碼）")
+                            "description": .string("Footer text (optional, if not provided, page number will be used)")
                         ]),
                         "type": .object([
                             "type": .string("string"),
-                            "description": .string("頁尾類型：default（預設）, first（首頁）, even（偶數頁）")
+                            "description": .string("Footer type: default (default), first (home page), even (even page)")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -935,21 +919,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "update_footer",
-                description: "更新頁尾內容",
+                description: "Update footer content",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "footer_id": .object([
                             "type": .string("string"),
-                            "description": .string("頁尾 ID（從 add_footer 返回）")
+                            "description": .string("Footer ID (returned from add_footer)")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("新的頁尾文字")
+                            "description": .string("New footer text")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("footer_id"), .string("text")])
@@ -957,65 +941,64 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_page_number",
-                description: "在頁尾插入頁碼",
+                description: "Insert page number at the end of the page",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "format": .object([
                             "type": .string("string"),
-                            "description": .string("頁碼格式：simple（1）, pageOfTotal（Page 1 of 10）, withDash（- 1 -）, 或自訂格式如 '第#頁'（# 代表頁碼）")
+                            "description": .string("Page number format: simple (1), pageOfTotal (Page 1 of 10), withDash (- 1 -), or custom format such as 'Page #' (# represents the page number)")
                         ]),
                         "alignment": .object([
                             "type": .string("string"),
-                            "description": .string("對齊方式：left, center, right（預設 center）")
+                            "description": .string("Alignment: left, center, right (default center)")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 圖片
             Tool(
                 name: "insert_image",
-                description: "插入圖片到文件中",
+                description: "Insert image into file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "base64": .object([
                             "type": .string("string"),
-                            "description": .string("圖片的 Base64 編碼資料")
+                            "description": .string("Base64 encoded data for the image")
                         ]),
                         "file_name": .object([
                             "type": .string("string"),
-                            "description": .string("圖片檔名（包含副檔名，如 image.png）")
+                            "description": .string("Image file name (including file extension, such as image.png)")
                         ]),
                         "width": .object([
                             "type": .string("integer"),
-                            "description": .string("圖片寬度（像素）")
+                            "description": .string("Image width (pixels)")
                         ]),
                         "height": .object([
                             "type": .string("integer"),
-                            "description": .string("圖片高度（像素）")
+                            "description": .string("Image height (pixels)")
                         ]),
                         "index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置（段落索引，可選）")
+                            "description": .string("insertion position (paragraph index, optional)")
                         ]),
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("圖片名稱（可選，用於替代文字）")
+                            "description": .string("Image name (optional, for alt text)")
                         ]),
                         "description": .object([
                             "type": .string("string"),
-                            "description": .string("圖片描述（可選，用於無障礙）")
+                            "description": .string("Image description (optional, for accessibility)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("base64"), .string("file_name"), .string("width"), .string("height")])
@@ -1023,37 +1006,37 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_image_from_path",
-                description: "從檔案路徑插入圖片（推薦用於大型圖片，避免 base64 傳輸）",
+                description: "Insert image from archive path (recommended for large images, avoid base64 transfer)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "path": .object([
                             "type": .string("string"),
-                            "description": .string("圖片檔案的完整路徑")
+                            "description": .string("Full path to image file")
                         ]),
                         "width": .object([
                             "type": .string("integer"),
-                            "description": .string("圖片寬度（像素）")
+                            "description": .string("Image width (pixels)")
                         ]),
                         "height": .object([
                             "type": .string("integer"),
-                            "description": .string("圖片高度（像素）")
+                            "description": .string("Image height (pixels)")
                         ]),
                         "index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置（段落索引，可選）")
+                            "description": .string("insertion position (paragraph index, optional)")
                         ]),
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("圖片名稱（可選，用於替代文字）")
+                            "description": .string("Image name (optional, for alt text)")
                         ]),
                         "description": .object([
                             "type": .string("string"),
-                            "description": .string("圖片描述（可選，用於無障礙）")
+                            "description": .string("Image description (optional, for accessibility)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("path"), .string("width"), .string("height")])
@@ -1061,25 +1044,25 @@ class WordMCPServer {
             ),
             Tool(
                 name: "update_image",
-                description: "更新圖片尺寸",
+                description: "Update image size",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "image_id": .object([
                             "type": .string("string"),
-                            "description": .string("圖片 ID（從 insert_image 返回）")
+                            "description": .string("Image ID (returned from insert_image)")
                         ]),
                         "width": .object([
                             "type": .string("integer"),
-                            "description": .string("新的寬度（像素，可選）")
+                            "description": .string("new width (pixels, optional)")
                         ]),
                         "height": .object([
                             "type": .string("integer"),
-                            "description": .string("新的高度（像素，可選）")
+                            "description": .string("new height (pixels, optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("image_id")])
@@ -1087,17 +1070,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "delete_image",
-                description: "刪除圖片",
+                description: "Delete picture",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "image_id": .object([
                             "type": .string("string"),
-                            "description": .string("圖片 ID（從 insert_image 返回）")
+                            "description": .string("Image ID (returned from insert_image)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("image_id")])
@@ -1105,13 +1088,13 @@ class WordMCPServer {
             ),
             Tool(
                 name: "list_images",
-                description: "列出文件中所有圖片",
+                description: "List all images in the file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -1119,21 +1102,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "export_image",
-                description: "匯出單一圖片到檔案",
+                description: "Export a single image to a file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "image_id": .object([
                             "type": .string("string"),
-                            "description": .string("圖片 ID（從 list_images 取得）")
+                            "description": .string("Image ID (obtained from list_images)")
                         ]),
                         "save_path": .object([
                             "type": .string("string"),
-                            "description": .string("完整存檔路徑（含檔名，如 /tmp/output.png）")
+                            "description": .string("Full archive path (including file name, such as /tmp/output.png)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("image_id"), .string("save_path")])
@@ -1141,17 +1124,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "export_all_images",
-                description: "匯出所有圖片到目錄",
+                description: "Export all images to directory",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "output_dir": .object([
                             "type": .string("string"),
-                            "description": .string("輸出目錄路徑（自動建立）")
+                            "description": .string("Output directory path (automatically created)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("output_dir")])
@@ -1159,53 +1142,52 @@ class WordMCPServer {
             ),
             Tool(
                 name: "set_image_style",
-                description: "設定圖片樣式（邊框、陰影等）",
+                description: "Set image style (border, shadow, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "image_id": .object([
                             "type": .string("string"),
-                            "description": .string("圖片 ID（從 insert_image 返回）")
+                            "description": .string("Image ID (returned from insert_image)")
                         ]),
                         "has_border": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否顯示邊框")
+                            "description": .string("Whether to display borders")
                         ]),
                         "border_color": .object([
                             "type": .string("string"),
-                            "description": .string("邊框顏色（RGB hex，如 '000000'）")
+                            "description": .string("Border color (RGB hex, such as '000000')")
                         ]),
                         "border_width": .object([
                             "type": .string("integer"),
-                            "description": .string("邊框寬度（EMU，9525 ≈ 0.75pt）")
+                            "description": .string("Border width (EMU, 9525 ~ 0.75pt)")
                         ]),
                         "has_shadow": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否顯示陰影")
+                            "description": .string("Whether to show shadow")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("image_id")])
                 ])
             ),
 
-            // 匯出
             Tool(
                 name: "export_text",
-                description: "匯出文件為純文字",
+                description: "Export files as plain text",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "path": .object([
                             "type": .string("string"),
-                            "description": .string("匯出路徑")
+                            "description": .string("Export path")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("path")])
@@ -1213,61 +1195,60 @@ class WordMCPServer {
             ),
             Tool(
                 name: "export_markdown",
-                description: "將 .docx 轉為 Markdown 並提取圖片（Direct Mode, Tier 2）",
+                description: "Convert .docx to Markdown and extract images (Direct Mode, Tier 2)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "source_path": .object([
                             "type": .string("string"),
-                            "description": .string("來源 .docx 檔案路徑")
+                            "description": .string("Source .docx file path")
                         ]),
                         "path": .object([
                             "type": .string("string"),
-                            "description": .string("Markdown 匯出路徑")
+                            "description": .string("Markdown export path")
                         ]),
                         "figures_directory": .object([
                             "type": .string("string"),
-                            "description": .string("圖片輸出目錄（預設為 path 同層的 figures/）")
+                            "description": .string("Picture output directory (default is figures/ on the same layer as path)")
                         ]),
                         "include_frontmatter": .object([
                             "type": .string("boolean"),
-                            "description": .string("包含文件屬性作為 YAML frontmatter（預設 false）")
+                            "description": .string("Include file attributes as YAML frontmatter (default false)")
                         ]),
                         "hard_line_breaks": .object([
                             "type": .string("boolean"),
-                            "description": .string("將軟換行轉為硬換行（預設 false）")
+                            "description": .string("Convert soft newlines to hard newlines (default false)")
                         ])
                     ]),
                     "required": .array([.string("source_path"), .string("path")])
                 ])
             ),
 
-            // 超連結和書籤
             Tool(
                 name: "insert_hyperlink",
-                description: "插入外部超連結（URL）",
+                description: "Insert external hyperlink (URL)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "url": .object([
                             "type": .string("string"),
-                            "description": .string("目標 URL（如 https://example.com）")
+                            "description": .string("Target URL (such as https://example.com)")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("連結顯示文字")
+                            "description": .string("Link display text")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入到哪個段落（可選，預設最後一個段落）")
+                            "description": .string("Which paragraph to insert into (optional, defaults to the last paragraph)")
                         ]),
                         "tooltip": .object([
                             "type": .string("string"),
-                            "description": .string("滑鼠懸停提示文字（可選）")
+                            "description": .string("Mouseover prompt text (optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("url"), .string("text")])
@@ -1275,29 +1256,29 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_internal_link",
-                description: "插入內部連結（連到書籤）",
+                description: "Insert internal link (to bookmark)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "bookmark_name": .object([
                             "type": .string("string"),
-                            "description": .string("目標書籤名稱")
+                            "description": .string("target bookmark name")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("連結顯示文字")
+                            "description": .string("Link display text")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入到哪個段落（可選，預設最後一個段落）")
+                            "description": .string("Which paragraph to insert into (optional, defaults to the last paragraph)")
                         ]),
                         "tooltip": .object([
                             "type": .string("string"),
-                            "description": .string("滑鼠懸停提示文字（可選）")
+                            "description": .string("Mouseover prompt text (optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("bookmark_name"), .string("text")])
@@ -1305,25 +1286,25 @@ class WordMCPServer {
             ),
             Tool(
                 name: "update_hyperlink",
-                description: "更新超連結的文字或 URL",
+                description: "Update the text or URL of a hyperlink",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "hyperlink_id": .object([
                             "type": .string("string"),
-                            "description": .string("超連結 ID（從 insert_hyperlink 返回）")
+                            "description": .string("Hyperlink ID (returned from insert_hyperlink)")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("新的顯示文字（可選）")
+                            "description": .string("New display text (optional)")
                         ]),
                         "url": .object([
                             "type": .string("string"),
-                            "description": .string("新的 URL（可選，僅外部連結）")
+                            "description": .string("New URL (optional, external links only)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("hyperlink_id")])
@@ -1331,17 +1312,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "delete_hyperlink",
-                description: "刪除超連結（保留文字但移除連結）",
+                description: "Delete hyperlink (keep text but remove link)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "hyperlink_id": .object([
                             "type": .string("string"),
-                            "description": .string("超連結 ID（從 insert_hyperlink 返回）")
+                            "description": .string("Hyperlink ID (returned from insert_hyperlink)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("hyperlink_id")])
@@ -1349,21 +1330,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_bookmark",
-                description: "插入書籤標記（用於文件內部導航）",
+                description: "Insert bookmark markers (for navigation within the file)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("書籤名稱（不能包含空格，不能以數字開頭，最多 40 字元）")
+                            "description": .string("Bookmark name (cannot contain spaces, cannot start with a number, maximum 40 characters)")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入到哪個段落（可選，預設最後一個段落）")
+                            "description": .string("Which paragraph to insert into (optional, defaults to the last paragraph)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("name")])
@@ -1371,45 +1352,44 @@ class WordMCPServer {
             ),
             Tool(
                 name: "delete_bookmark",
-                description: "刪除書籤",
+                description: "Delete bookmark",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("要刪除的書籤名稱")
+                            "description": .string("Bookmark name to delete")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("name")])
                 ])
             ),
 
-            // 註解和修訂
             Tool(
                 name: "insert_comment",
-                description: "在指定段落插入註解",
+                description: "Insert a comment into the specified paragraph",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("註解文字")
+                            "description": .string("Annotation text")
                         ]),
                         "author": .object([
                             "type": .string("string"),
-                            "description": .string("作者名稱")
+                            "description": .string("Author name")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("要附加註解的段落索引")
+                            "description": .string("Paragraph index to which annotation is to be attached")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("text"), .string("author"), .string("paragraph_index")])
@@ -1417,21 +1397,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "update_comment",
-                description: "更新註解內容",
+                description: "Update annotation content",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "comment_id": .object([
                             "type": .string("integer"),
-                            "description": .string("註解 ID")
+                            "description": .string("Annotation ID")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("新的註解文字")
+                            "description": .string("New annotation text")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("comment_id"), .string("text")])
@@ -1439,17 +1419,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "delete_comment",
-                description: "刪除註解",
+                description: "Delete annotation",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "comment_id": .object([
                             "type": .string("integer"),
-                            "description": .string("要刪除的註解 ID")
+                            "description": .string("Annotation ID to be deleted")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("comment_id")])
@@ -1457,13 +1437,13 @@ class WordMCPServer {
             ),
             Tool(
                 name: "list_comments",
-                description: "列出文件中所有註解",
+                description: "List all annotations in the file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -1471,17 +1451,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "enable_track_changes",
-                description: "啟用修訂追蹤",
+                description: "Enable revision tracking",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "author": .object([
                             "type": .string("string"),
-                            "description": .string("修訂作者名稱（可選）")
+                            "description": .string("Revise author name (optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -1489,13 +1469,13 @@ class WordMCPServer {
             ),
             Tool(
                 name: "disable_track_changes",
-                description: "停用修訂追蹤",
+                description: "Disable revision tracking",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -1503,21 +1483,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "accept_revision",
-                description: "接受指定的修訂",
+                description: "Accept the specified revision",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "revision_id": .object([
                             "type": .string("integer"),
-                            "description": .string("修訂 ID（使用 'all' 接受所有修訂）")
+                            "description": .string("Revision ID (use 'all' to accept all revisions)")
                         ]),
                         "all": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否接受所有修訂")
+                            "description": .string("Whether to accept all revisions")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -1525,45 +1505,44 @@ class WordMCPServer {
             ),
             Tool(
                 name: "reject_revision",
-                description: "拒絕指定的修訂",
+                description: "Reject the specified revision",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "revision_id": .object([
                             "type": .string("integer"),
-                            "description": .string("修訂 ID")
+                            "description": .string("Revision ID")
                         ]),
                         "all": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否拒絕所有修訂")
+                            "description": .string("Whether to reject all revisions")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 腳註/尾註
             Tool(
                 name: "insert_footnote",
-                description: "在指定段落插入腳註（出現在頁面底部）",
+                description: "Inserts a footnote (appears at the bottom of the page) in the specified paragraph",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("腳註內容")
+                            "description": .string("Footnote content")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("text")])
@@ -1571,17 +1550,17 @@ class WordMCPServer {
             ),
             Tool(
                 name: "delete_footnote",
-                description: "刪除指定的腳註",
+                description: "Delete the specified footnote",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "footnote_id": .object([
                             "type": .string("integer"),
-                            "description": .string("腳註 ID")
+                            "description": .string("Footnote ID")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("footnote_id")])
@@ -1589,21 +1568,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_endnote",
-                description: "在指定段落插入尾註（出現在文件結尾）",
+                description: "Insert an endnote (appears at the end of the file) in the specified paragraph",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("尾註內容")
+                            "description": .string("Endnote content")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("text")])
@@ -1611,75 +1590,72 @@ class WordMCPServer {
             ),
             Tool(
                 name: "delete_endnote",
-                description: "刪除指定的尾註",
+                description: "Delete the specified endnote",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "endnote_id": .object([
                             "type": .string("integer"),
-                            "description": .string("尾註 ID")
+                            "description": .string("Endnote ID")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("endnote_id")])
                 ])
             ),
 
-            // P7 進階功能
 
-            // 7.1 目錄
             Tool(
                 name: "insert_toc",
-                description: "插入目錄（Table of Contents）",
+                description: "Insert Table of Contents",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "title": .object([
                             "type": .string("string"),
-                            "description": .string("目錄標題")
+                            "description": .string("Table of contents title")
                         ]),
                         "heading_levels": .object([
                             "type": .string("string"),
-                            "description": .string("包含的標題層級範圍，如 1-3")
+                            "description": .string("Contains a range of title levels, such as 1-3")
                         ]),
                         "index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置（從 0 開始），不指定則插入到開頭")
+                            "description": .string("Insertion position (starting from 0), if not specified, insert to the beginning")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 7.2 表單控制項
             Tool(
                 name: "insert_text_field",
-                description: "插入表單文字欄位",
+                description: "Insert form text field",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("欄位名稱")
+                            "description": .string("Field name")
                         ]),
                         "default_value": .object([
                             "type": .string("string"),
-                            "description": .string("預設值")
+                            "description": .string("default value")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("name")])
@@ -1687,25 +1663,25 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_checkbox",
-                description: "插入核取方塊",
+                description: "Insert checkbox",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("欄位名稱")
+                            "description": .string("Field name")
                         ]),
                         "checked": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否預設勾選")
+                            "description": .string("Whether to check by default")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("name")])
@@ -1713,89 +1689,87 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_dropdown",
-                description: "插入下拉選單",
+                description: "Insert drop-down menu",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "name": .object([
                             "type": .string("string"),
-                            "description": .string("欄位名稱")
+                            "description": .string("Field name")
                         ]),
                         "options": .object([
                             "type": .string("array"),
-                            "description": .string("選項列表（JSON 陣列格式）")
+                            "description": .string("List of options (JSON array format)")
                         ]),
                         "selected_index": .object([
                             "type": .string("integer"),
-                            "description": .string("預設選中的索引（從 0 開始）")
+                            "description": .string("Default selected index (starting from 0)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("name"), .string("options")])
                 ])
             ),
 
-            // 7.3 數學公式
             Tool(
                 name: "insert_equation",
-                description: "插入數學公式（支援簡化 LaTeX 語法）",
+                description: "Insert mathematical formulas (supports simplified LaTeX syntax)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "latex": .object([
                             "type": .string("string"),
-                            "description": .string("LaTeX 格式的公式")
+                            "description": .string("Formulas in LaTeX format")
                         ]),
                         "display_mode": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否為獨立區塊（true）或行內（false）")
+                            "description": .string("Whether it is an independent block (true) or inline (false)")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（行內模式時指定插入位置）")
+                            "description": .string("Paragraph index (specify insertion position in inline mode)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("latex")])
                 ])
             ),
 
-            // 7.4 進階格式
             Tool(
                 name: "set_paragraph_border",
-                description: "設定段落邊框",
+                description: "Set paragraph borders",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "border_type": .object([
                             "type": .string("string"),
-                            "description": .string("邊框類型：single, double, dotted, dashed, thick, wave")
+                            "description": .string("Border type: single, double, dotted, dashed, thick, wave")
                         ]),
                         "color": .object([
                             "type": .string("string"),
-                            "description": .string("邊框顏色（十六進位 RGB）")
+                            "description": .string("Border color (hex RGB)")
                         ]),
                         "size": .object([
                             "type": .string("integer"),
-                            "description": .string("邊框寬度（1/8 點）")
+                            "description": .string("Border width (1/8 point)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
@@ -1803,21 +1777,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "set_paragraph_shading",
-                description: "設定段落底色",
+                description: "Set paragraph background color",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "fill": .object([
                             "type": .string("string"),
-                            "description": .string("填充顏色（十六進位 RGB，如 FFFF00）")
+                            "description": .string("Fill color (hex RGB, such as FFFF00)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("fill")])
@@ -1825,21 +1799,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "set_character_spacing",
-                description: "設定字元間距",
+                description: "Set character spacing",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "spacing": .object([
                             "type": .string("integer"),
-                            "description": .string("字元間距（1/20 點，正值增加，負值減少）")
+                            "description": .string("Character spacing (1/20 point, positive values increase, negative values decrease)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
@@ -1847,51 +1821,49 @@ class WordMCPServer {
             ),
             Tool(
                 name: "set_text_effect",
-                description: "設定文字效果",
+                description: "Set text effects",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "effect": .object([
                             "type": .string("string"),
-                            "description": .string("效果類型：blinkBackground, lights, antsBlack, antsRed, shimmer, sparkle, none")
+                            "description": .string("Effect type: blinkBackground, lights, antsBlack, antsRed, shimmer, sparkle, none")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("effect")])
                 ])
             ),
 
-            // P8 新功能：註解回覆、浮動圖片、欄位代碼、重複區段
 
-            // 8.1 註解回覆
             Tool(
                 name: "reply_to_comment",
-                description: "回覆現有的註解",
+                description: "Reply to existing comment",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "parent_comment_id": .object([
                             "type": .string("integer"),
-                            "description": .string("要回覆的註解 ID")
+                            "description": .string("Annotation ID to reply to")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("回覆內容")
+                            "description": .string("Reply content")
                         ]),
                         "author": .object([
                             "type": .string("string"),
-                            "description": .string("回覆者名稱（預設 'Author'）")
+                            "description": .string("Respondent name (default 'Author')")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("parent_comment_id"), .string("text")])
@@ -1899,113 +1871,111 @@ class WordMCPServer {
             ),
             Tool(
                 name: "resolve_comment",
-                description: "將註解標記為已解決或未解決",
+                description: "Mark annotations as resolved or unresolved",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "comment_id": .object([
                             "type": .string("integer"),
-                            "description": .string("註解 ID")
+                            "description": .string("Annotation ID")
                         ]),
                         "resolved": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否已解決（true/false）")
+                            "description": .string("Whether it has been resolved (true/false)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("comment_id")])
                 ])
             ),
 
-            // 8.2 浮動圖片
             Tool(
                 name: "insert_floating_image",
-                description: "插入浮動圖片（可設定位置和文繞方式）",
+                description: "Insert floating pictures (position and text wrapping method can be set)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "base64": .object([
                             "type": .string("string"),
-                            "description": .string("圖片的 Base64 編碼資料")
+                            "description": .string("Base64 encoded data for the image")
                         ]),
                         "file_name": .object([
                             "type": .string("string"),
-                            "description": .string("圖片檔名（包含副檔名）")
+                            "description": .string("Image file name (including file extension)")
                         ]),
                         "width": .object([
                             "type": .string("integer"),
-                            "description": .string("圖片寬度（像素）")
+                            "description": .string("Image width (pixels)")
                         ]),
                         "height": .object([
                             "type": .string("integer"),
-                            "description": .string("圖片高度（像素）")
+                            "description": .string("Image height (pixels)")
                         ]),
                         "wrap_type": .object([
                             "type": .string("string"),
-                            "description": .string("文繞方式：square（四邊型）, tight（緊密）, through（穿透）, topAndBottom（上下）, behindText（文字下方）, inFrontOfText（文字上方）")
+                            "description": .string("Text wrapping methods: square, tight, through, topAndBottom, behindText, inFrontOfText")
                         ]),
                         "horizontal_position": .object([
                             "type": .string("string"),
-                            "description": .string("水平位置：left, center, right, 或具體偏移像素")
+                            "description": .string("Horizontal position: left, center, right, or specific offset pixels")
                         ]),
                         "vertical_position": .object([
                             "type": .string("string"),
-                            "description": .string("垂直位置：top, center, bottom, 或具體偏移像素")
+                            "description": .string("Vertical position: top, center, bottom, or specific offset pixels")
                         ]),
                         "relative_to_h": .object([
                             "type": .string("string"),
-                            "description": .string("水平相對於：margin, page, column, character")
+                            "description": .string("Horizontal relative to: margin, page, column, character")
                         ]),
                         "relative_to_v": .object([
                             "type": .string("string"),
-                            "description": .string("垂直相對於：margin, page, paragraph, line")
+                            "description": .string("Vertically relative to: margin, page, paragraph, line")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("base64"), .string("file_name"), .string("width"), .string("height")])
                 ])
             ),
 
-            // 8.3 欄位代碼
             Tool(
                 name: "insert_if_field",
-                description: "插入 IF 條件判斷欄位",
+                description: "Insert IF conditional judgment field",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "left_operand": .object([
                             "type": .string("string"),
-                            "description": .string("左運算元（可以是欄位名稱或值）")
+                            "description": .string("Left operand (can be a field name or value)")
                         ]),
                         "operator": .object([
                             "type": .string("string"),
-                            "description": .string("比較運算子：=, <>, <, >, <=, >=")
+                            "description": .string("Comparison operators: =, <>, <, >, <=, >=")
                         ]),
                         "right_operand": .object([
                             "type": .string("string"),
-                            "description": .string("右運算元")
+                            "description": .string("right operand")
                         ]),
                         "true_text": .object([
                             "type": .string("string"),
-                            "description": .string("條件為真時顯示的文字")
+                            "description": .string("Text to display when the condition is true")
                         ]),
                         "false_text": .object([
                             "type": .string("string"),
-                            "description": .string("條件為假時顯示的文字")
+                            "description": .string("Text to display when the condition is false")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("left_operand"), .string("operator"), .string("right_operand"), .string("true_text"), .string("false_text")])
@@ -2013,25 +1983,25 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_calculation_field",
-                description: "插入計算欄位（支援 SUM, AVERAGE, MAX, MIN 等）",
+                description: "Insert calculated fields (supports SUM, AVERAGE, MAX, MIN, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "expression": .object([
                             "type": .string("string"),
-                            "description": .string("計算表達式，如 'SUM(ABOVE)', 'AVERAGE(LEFT)', '=bookmark1*bookmark2'")
+                            "description": .string("Calculation expressions, such as 'SUM(ABOVE)', 'AVERAGE(LEFT)', '=bookmark1*bookmark2'")
                         ]),
                         "format": .object([
                             "type": .string("string"),
-                            "description": .string("數字格式，如 '#,##0.00'（可選）")
+                            "description": .string("Number format, such as '#,##0.00' (optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("expression")])
@@ -2039,25 +2009,25 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_date_field",
-                description: "插入日期時間欄位",
+                description: "Insert date time field",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "type": .object([
                             "type": .string("string"),
-                            "description": .string("日期類型：date（目前日期）, time（目前時間）, createDate（建立日期）, saveDate（儲存日期）")
+                            "description": .string("Date type: date (current date), time (current time), createDate (creation date), saveDate (storage date)")
                         ]),
                         "format": .object([
                             "type": .string("string"),
-                            "description": .string("日期格式，如 'yyyy/M/d', 'yyyy年M月d日'（可選）")
+                            "description": .string("Date format, such as 'yyyy/M/d', 'yyyy year M month d day' (optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
@@ -2065,21 +2035,21 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_page_field",
-                description: "插入頁碼或文件資訊欄位",
+                description: "Insert page number or document information fields",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "type": .object([
                             "type": .string("string"),
-                            "description": .string("欄位類型：page（頁碼）, numPages（總頁數）, fileName（檔名）, author（作者）, numWords（字數）")
+                            "description": .string("Field type: page (page number), numPages (total number of pages), fileName (file name), author (author), numWords (number of words)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("type")])
@@ -2087,29 +2057,29 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_merge_field",
-                description: "插入合併列印欄位",
+                description: "Insert merge print fields",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "field_name": .object([
                             "type": .string("string"),
-                            "description": .string("欄位名稱（對應資料來源的欄位）")
+                            "description": .string("Field name (field corresponding to the data source)")
                         ]),
                         "text_before": .object([
                             "type": .string("string"),
-                            "description": .string("前置文字（僅當欄位非空時顯示）")
+                            "description": .string("Prefix text (only displayed if the field is not empty)")
                         ]),
                         "text_after": .object([
                             "type": .string("string"),
-                            "description": .string("後置文字（僅當欄位非空時顯示）")
+                            "description": .string("Post text (only displayed if the field is not empty)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("field_name")])
@@ -2117,69 +2087,68 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_sequence_field",
-                description: "插入序列欄位（自動編號，用於圖表編號等）",
+                description: "Insert sequence fields (auto numbering, for chart numbering, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "identifier": .object([
                             "type": .string("string"),
-                            "description": .string("序列識別符，如 'Figure', 'Table', 'Equation'")
+                            "description": .string("Sequence identifier, such as 'Figure', 'Table', 'Equation'")
                         ]),
                         "format": .object([
                             "type": .string("string"),
-                            "description": .string("編號格式：arabic（1,2,3）, alphabetic（A,B,C）, roman（I,II,III）")
+                            "description": .string("Numbering format: arabic (1,2,3), alphabetic (A,B,C), roman (I,II,III)")
                         ]),
                         "reset_level": .object([
                             "type": .string("integer"),
-                            "description": .string("重設層級（對應標題層級，如設為 1 則每遇到 Heading1 就重設）")
+                            "description": .string("Reset the level (corresponding to the heading level, if set to 1, it will be reset every time Heading1 is encountered)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("identifier")])
                 ])
             ),
 
-            // 8.4 重複區段控制項
             Tool(
                 name: "insert_content_control",
-                description: "插入內容控制項（SDT）",
+                description: "Insert content controls (SDT)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "type": .object([
                             "type": .string("string"),
-                            "description": .string("控制項類型：richText, plainText, picture, date, dropDownList, comboBox, checkbox")
+                            "description": .string("Control item types: richText, plainText, picture, date, dropDownList, comboBox, checkbox")
                         ]),
                         "tag": .object([
                             "type": .string("string"),
-                            "description": .string("控制項標籤（用於識別）")
+                            "description": .string("Control label (for identification)")
                         ]),
                         "alias": .object([
                             "type": .string("string"),
-                            "description": .string("控制項顯示名稱")
+                            "description": .string("Control display name")
                         ]),
                         "placeholder": .object([
                             "type": .string("string"),
-                            "description": .string("佔位符提示文字")
+                            "description": .string("Placeholder prompt text")
                         ]),
                         "content": .object([
                             "type": .string("string"),
-                            "description": .string("預設內容")
+                            "description": .string("Default content")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("type"), .string("tag")])
@@ -2187,419 +2156,400 @@ class WordMCPServer {
             ),
             Tool(
                 name: "insert_repeating_section",
-                description: "插入重複區段（可新增/刪除項目的區塊）",
+                description: "Insert repeating section (block that can add/delete items)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置（段落索引）")
+                            "description": .string("Insertion position (paragraph index)")
                         ]),
                         "tag": .object([
                             "type": .string("string"),
-                            "description": .string("區段標籤（用於識別）")
+                            "description": .string("Section label (for identification)")
                         ]),
                         "section_title": .object([
                             "type": .string("string"),
-                            "description": .string("區段標題（顯示在 UI）")
+                            "description": .string("Section title (shown in UI)")
                         ]),
                         "items": .object([
                             "type": .string("array"),
-                            "description": .string("初始項目內容（字串陣列）")
+                            "description": .string("Initial project content (string array)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("tag")])
                 ])
             ),
 
-            // P9 新增功能：列表查詢、文件屬性、搜尋文字、批次修訂
 
-            // 9.1 insert_text - 在指定位置插入文字
             Tool(
                 name: "insert_text",
-                description: "在指定段落的指定位置插入文字",
+                description: "Insert text at the specified position in the specified paragraph",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("要插入的文字")
+                            "description": .string("text to insert")
                         ]),
                         "position": .object([
                             "type": .string("integer"),
-                            "description": .string("字元位置（從 0 開始，不指定則插入到段落末尾）")
+                            "description": .string("Character position (starts from 0, if not specified, is inserted at the end of the paragraph)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("text")])
                 ])
             ),
 
-            // 9.2 get_document_text - get_text 的別名
             Tool(
                 name: "get_document_text",
-                description: "取得 .docx 檔案的完整純文字內容（get_text 的別名，Direct Mode, Tier 1）",
+                description: "Get the complete plain text content of a .docx file (alias for get_text, Direct Mode, Tier 1)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "source_path": .object([
                             "type": .string("string"),
-                            "description": .string("來源 .docx 檔案路徑")
+                            "description": .string("Source .docx file path")
                         ])
                     ]),
                     "required": .array([.string("source_path")])
                 ])
             ),
 
-            // 9.3 search_text - 搜尋文字並返回位置
             Tool(
                 name: "search_text",
-                description: "在文件中搜尋指定文字，返回所有符合的位置",
+                description: "Search for specified text in the document and return all matching positions",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "query": .object([
                             "type": .string("string"),
-                            "description": .string("要搜尋的文字")
+                            "description": .string("text to search for")
                         ]),
                         "case_sensitive": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否區分大小寫（預設 false）")
+                            "description": .string("Whether to be case sensitive (default false)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("query")])
                 ])
             ),
 
-            // 9.4 list_hyperlinks - 列出所有超連結
             Tool(
                 name: "list_hyperlinks",
-                description: "列出文件中所有的超連結",
+                description: "List all hyperlinks in the document",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.5 list_bookmarks - 列出所有書籤
             Tool(
                 name: "list_bookmarks",
-                description: "列出文件中所有的書籤",
+                description: "List all bookmarks in a file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.6 list_footnotes - 列出所有腳註
             Tool(
                 name: "list_footnotes",
-                description: "列出文件中所有的腳註",
+                description: "List all footnotes in a file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.7 list_endnotes - 列出所有尾註
             Tool(
                 name: "list_endnotes",
-                description: "列出文件中所有的尾註",
+                description: "List all endnotes in a file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.8 get_revisions - 取得所有修訂記錄
             Tool(
                 name: "get_revisions",
-                description: "取得文件中所有的修訂追蹤記錄",
+                description: "Get all revision tracking records in the file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.9 accept_all_revisions - 接受所有修訂
             Tool(
                 name: "accept_all_revisions",
-                description: "接受文件中所有的修訂",
+                description: "Accept all revisions in the file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.10 reject_all_revisions - 拒絕所有修訂
             Tool(
                 name: "reject_all_revisions",
-                description: "拒絕文件中所有的修訂",
+                description: "Reject all revisions in the file",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.11 set_document_properties - 設定文件屬性
             Tool(
                 name: "set_document_properties",
-                description: "設定文件屬性（標題、作者、主旨、關鍵字等）",
+                description: "Set document properties (title, author, subject, keywords, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "title": .object([
                             "type": .string("string"),
-                            "description": .string("文件標題")
+                            "description": .string("File title")
                         ]),
                         "subject": .object([
                             "type": .string("string"),
-                            "description": .string("主旨")
+                            "description": .string("Purpose")
                         ]),
                         "creator": .object([
                             "type": .string("string"),
-                            "description": .string("作者")
+                            "description": .string("author")
                         ]),
                         "keywords": .object([
                             "type": .string("string"),
-                            "description": .string("關鍵字（以逗號分隔）")
+                            "description": .string("Keywords (separated by commas)")
                         ]),
                         "description": .object([
                             "type": .string("string"),
-                            "description": .string("描述/備註")
+                            "description": .string("Description/Remarks")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.12 get_paragraph_runs - 取得段落的 runs 及其格式
             Tool(
                 name: "get_paragraph_runs",
-                description: "取得指定段落的所有 runs（文字片段）及其格式資訊，包含顏色、粗體、斜體等",
+                description: "Get all runs (text fragments) of the specified paragraph and their formatting information, including color, bold, italics, etc.",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
                 ])
             ),
 
-            // 9.13 get_text_with_formatting - 取得帶格式標記的文字
             Tool(
                 name: "get_text_with_formatting",
-                description: "取得文件文字，並以 Markdown 標記格式（粗體用 **、斜體用 *、紅色用 {{color:red}}）",
+                description: "Get the file text and mark it in Markdown format (use ** for bold, * for italics, and {{color:red}} for red)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("指定段落索引（可選，不指定則取得全部）")
+                            "description": .string("Specify paragraph index (optional, if not specified, get all)")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.14 search_by_formatting - 搜尋特定格式的文字
             Tool(
                 name: "search_by_formatting",
-                description: "搜尋具有特定格式的文字（如紅色、粗體）",
+                description: "Search for text with a specific format (e.g. red, bold)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "color": .object([
                             "type": .string("string"),
-                            "description": .string("顏色 RGB hex（如 FF0000 代表紅色）")
+                            "description": .string("Color RGB hex (eg FF0000 represents red)")
                         ]),
                         "bold": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否為粗體")
+                            "description": .string("Whether to be bold")
                         ]),
                         "italic": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否為斜體")
+                            "description": .string("Is it italicized?")
                         ]),
                         "highlight": .object([
                             "type": .string("string"),
-                            "description": .string("螢光標記顏色（yellow, green, cyan 等）")
+                            "description": .string("Fluorescent marker color (yellow, green, cyan, etc.)")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.15 get_document_properties - 取得文件屬性
             Tool(
                 name: "get_document_properties",
-                description: "取得文件屬性（標題、作者、建立日期等）",
+                description: "Get file attributes (title, author, creation date, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 9.16 search_text_with_formatting - 搜尋文字並顯示格式
             Tool(
                 name: "search_text_with_formatting",
-                description: "搜尋文字並返回匹配位置及其格式標記（粗體、斜體、顏色等）",
+                description: "Searches for text and returns matching positions and their formatting markers (bold, italics, color, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "query": .object([
                             "type": .string("string"),
-                            "description": .string("要搜尋的文字")
+                            "description": .string("text to search for")
                         ]),
                         "case_sensitive": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否區分大小寫（預設 false）")
+                            "description": .string("Whether to be case sensitive (default false)")
                         ]),
                         "context_chars": .object([
                             "type": .string("integer"),
-                            "description": .string("顯示匹配位置前後多少字元（預設 20）")
+                            "description": .string("Display the number of characters before and after the matching position (default 20)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("query")])
                 ])
             ),
 
-            // 9.17 list_all_formatted_text - 列出特定格式的所有文字
             Tool(
                 name: "list_all_formatted_text",
-                description: "列出所有具有特定格式的文字。必須指定 format_type: italic, bold, underline, color, highlight, strikethrough",
+                description: "List all text with a specific format. Must specify format_type: italic, bold, underline, color, highlight, strikethrough",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "format_type": .object([
                             "type": .string("string"),
-                            "description": .string("格式類型：italic, bold, underline, color, highlight, strikethrough")
+                            "description": .string("Format type: italic, bold, underline, color, highlight, strikethrough")
                         ]),
                         "color_filter": .object([
                             "type": .string("string"),
-                            "description": .string("當 format_type=color 時，可指定顏色（如 FF0000 代表紅色）")
+                            "description": .string("When format_type=color, the color can be specified (for example, FF0000 represents red)")
                         ]),
                         "paragraph_start": .object([
                             "type": .string("integer"),
-                            "description": .string("起始段落索引（可選）")
+                            "description": .string("Starting paragraph index (optional)")
                         ]),
                         "paragraph_end": .object([
                             "type": .string("integer"),
-                            "description": .string("結束段落索引（可選）")
+                            "description": .string("End paragraph index (optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("format_type")])
                 ])
             ),
 
-            // 9.18 get_word_count_by_section - 按區段統計字數
             Tool(
                 name: "get_word_count_by_section",
-                description: "按區段統計字數，可自訂分隔標記（如 References）並排除特定區段",
+                description: "Count word count by section, customizable delimiters (such as References) and exclude specific sections",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "section_markers": .object([
                             "type": .string("array"),
-                            "description": .string("區段分隔標記文字陣列（如 [\"Abstract\", \"Introduction\", \"References\"]）")
+                            "description": .string("Array of section delimiter markers (for example [\"Abstract\", \"Introduction\", \"References\"])")
                         ]),
                         "exclude_sections": .object([
                             "type": .string("array"),
-                            "description": .string("不計入總字數的區段名稱（如 [\"References\", \"Appendix\"]）")
+                            "description": .string("Section names excluded from total word count (for example [\"References\", \"Appendix\"])")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -2607,37 +2557,37 @@ class WordMCPServer {
             ),
             Tool(
                 name: "compare_documents",
-                description: "比對兩個 Word 文件的差異（段落層級），只回傳差異部分。支援文字、格式、結構比對模式",
+                description: "Compare the differences (paragraph level) between two Word files and return only the differences. Supports text, format, and structure comparison modes",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id_a": .object([
                             "type": .string("string"),
-                            "description": .string("基準文件（舊版本）的識別碼")
+                            "description": .string("Identifier of the baseline file (old version)")
                         ]),
                         "doc_id_b": .object([
                             "type": .string("string"),
-                            "description": .string("比較文件（新版本）的識別碼")
+                            "description": .string("Compare the identification code of the file (new version)")
                         ]),
                         "mode": .object([
                             "type": .string("string"),
-                            "description": .string("比對模式：text（預設，純文字差異）、formatting（含格式差異）、structure（結構摘要）、full（完整比對）"),
+                            "description": .string("Comparison mode: text (default, pure text difference), formatting (including formatting differences), structure (structure summary), full (complete comparison)"),
                             "enum": .array([.string("text"), .string("formatting"), .string("structure"), .string("full")])
                         ]),
                         "context_lines": .object([
                             "type": .string("integer"),
-                            "description": .string("差異前後顯示的未變更段落數（0-3，預設 0）"),
+                            "description": .string("Number of unchanged paragraphs displayed before and after the difference (0-3, default 0)"),
                             "minimum": .int(0),
                             "maximum": .int(3)
                         ]),
                         "max_results": .object([
                             "type": .string("integer"),
-                            "description": .string("最多回傳的差異筆數（預設 0 = 全部回傳）"),
+                            "description": .string("Maximum number of differences to be returned (default 0 = return all)"),
                             "minimum": .int(0)
                         ]),
                         "heading_styles": .object([
                             "type": .string("array"),
-                            "description": .string("自定義 heading 樣式名稱（用於 structure mode，如 [\"EC8\", \"ECtitle\"]）"),
+                            "description": .string("Custom heading style names (used in structure mode, for example [\"EC8\", \"ECtitle\"])"),
                             "items": .object(["type": .string("string")])
                         ])
                     ]),
@@ -2645,1146 +2595,1102 @@ class WordMCPServer {
                 ])
             ),
 
-            // ==================== Phase 1: 進階排版功能 ====================
 
-            // 10.1 set_columns - 多欄排版
             Tool(
                 name: "set_columns",
-                description: "設定文件多欄排版（預設整份文件，或指定段落後插入分節符）",
+                description: "Set multi-column formatting of documents (default for the entire document, or insert section breaks after specified paragraphs)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "columns": .object([
                             "type": .string("integer"),
-                            "description": .string("欄數（1-4）"),
+                            "description": .string("Number of columns (1-4)"),
                             "minimum": .int(1),
                             "maximum": .int(4)
                         ]),
                         "space": .object([
                             "type": .string("integer"),
-                            "description": .string("欄間距（twips，預設 720 = 0.5 inch）")
+                            "description": .string("Column spacing (twips, default 720 = 0.5 inch)")
                         ]),
                         "equal_width": .object([
                             "type": .string("boolean"),
-                            "description": .string("欄寬是否相等（預設 true）")
+                            "description": .string("Whether column widths are equal (default true)")
                         ]),
                         "separator": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否顯示分隔線（預設 false）")
+                            "description": .string("Whether to display separators (default false)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("columns")])
                 ])
             ),
 
-            // 10.2 insert_column_break - 分欄符號
             Tool(
                 name: "insert_column_break",
-                description: "在指定段落插入分欄符號",
+                description: "Insert column breaks into specified paragraphs",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
                 ])
             ),
 
-            // 10.3 set_line_numbers - 行號
             Tool(
                 name: "set_line_numbers",
-                description: "設定文件行號顯示",
+                description: "Set file line number display",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "enable": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否啟用行號")
+                            "description": .string("Whether to enable line numbers")
                         ]),
                         "start": .object([
                             "type": .string("integer"),
-                            "description": .string("起始行號（預設 1）")
+                            "description": .string("Starting line number (default 1)")
                         ]),
                         "count_by": .object([
                             "type": .string("integer"),
-                            "description": .string("每幾行顯示一次行號（預設 1）")
+                            "description": .string("Show line numbers every few lines (default 1)")
                         ]),
                         "restart": .object([
                             "type": .string("string"),
-                            "description": .string("重新編號模式：continuous（連續）、newSection（每節）、newPage（每頁）")
+                            "description": .string("Renumbering mode: continuous, newSection (per section), newPage (per page)")
                         ]),
                         "distance": .object([
                             "type": .string("integer"),
-                            "description": .string("行號與文字的距離（twips，預設 360）")
+                            "description": .string("The distance between line number and text (twips, default 360)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("enable")])
                 ])
             ),
 
-            // 10.4 set_page_borders - 頁面邊框
             Tool(
                 name: "set_page_borders",
-                description: "設定頁面邊框（四邊可獨立設定）",
+                description: "Set page borders (the four sides can be set independently)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "style": .object([
                             "type": .string("string"),
-                            "description": .string("邊框樣式：single（單線）、double（雙線）、dotted（點線）、dashed（虛線）、thick（粗線）、none（無）")
+                            "description": .string("Border style: single (single line), double (double line), dotted (dotted line), dashed (dashed line), thick (thick line), none (none)")
                         ]),
                         "color": .object([
                             "type": .string("string"),
-                            "description": .string("邊框顏色（RGB 十六進位，如 000000）")
+                            "description": .string("Border color (RGB hexadecimal, such as 000000)")
                         ]),
                         "size": .object([
                             "type": .string("integer"),
-                            "description": .string("邊框粗細（1/8 點，預設 4 = 0.5pt）")
+                            "description": .string("Border thickness (1/8 point, default 4 = 0.5pt)")
                         ]),
                         "offset_from": .object([
                             "type": .string("string"),
-                            "description": .string("邊框起算位置：text（從文字）、page（從頁邊）")
+                            "description": .string("Starting position of border: text (from text), page (from page edge)")
                         ]),
                         "top": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否顯示上邊框（預設 true）")
+                            "description": .string("Whether to display the top border (default true)")
                         ]),
                         "bottom": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否顯示下邊框（預設 true）")
+                            "description": .string("Whether to display the bottom border (default true)")
                         ]),
                         "left": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否顯示左邊框（預設 true）")
+                            "description": .string("Whether to display the left border (default true)")
                         ]),
                         "right": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否顯示右邊框（預設 true）")
+                            "description": .string("Whether to display the right border (default true)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("style")])
                 ])
             ),
 
-            // 10.5 insert_symbol - 特殊符號
             Tool(
                 name: "insert_symbol",
-                description: "在指定段落插入特殊符號（使用字型符號或 Unicode）",
+                description: "Insert special symbols into specified paragraphs (use font symbols or Unicode)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "char": .object([
                             "type": .string("string"),
-                            "description": .string("符號字元碼（十六進位，如 F020 或 Unicode 碼點）")
+                            "description": .string("Symbol character code (hexadecimal, such as F020 or Unicode code point)")
                         ]),
                         "font": .object([
                             "type": .string("string"),
-                            "description": .string("符號字型（如 Symbol, Wingdings, Wingdings 2）")
+                            "description": .string("Symbol fonts (e.g. Symbol, Wingdings, Wingdings 2)")
                         ]),
                         "position": .object([
                             "type": .string("string"),
-                            "description": .string("插入位置：start（段落開頭）、end（段落結尾）")
+                            "description": .string("Insertion position: start (beginning of paragraph), end (end of paragraph)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("char")])
                 ])
             ),
 
-            // 10.6 set_text_direction - 文字方向
             Tool(
                 name: "set_text_direction",
-                description: "設定段落或文件的文字方向（支援直書）",
+                description: "Set the text direction of a paragraph or document (supports straight writing)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "direction": .object([
                             "type": .string("string"),
-                            "description": .string("文字方向：lrTb（左到右，上到下，預設）、tbRl（上到下，右到左，直書）、btLr（下到上，左到右）")
+                            "description": .string("Text direction: lrTb (left to right, top to bottom, default), tbRl (top to bottom, right to left, straight writing), btLr (bottom to top, left to right)")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（不指定則套用全文件）")
+                            "description": .string("Paragraph index (if not specified, the entire document will be applied)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("direction")])
                 ])
             ),
 
-            // 10.7 insert_drop_cap - 首字放大
             Tool(
                 name: "insert_drop_cap",
-                description: "將段落首字放大（首字下沉效果）",
+                description: "Enlarge the first word of a paragraph (drop cap effect)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "type": .object([
                             "type": .string("string"),
-                            "description": .string("首字類型：drop（下沉，預設）、margin（在邊界）、none（移除）")
+                            "description": .string("First word type: drop (sink, default), margin (at the border), none (remove)")
                         ]),
                         "lines": .object([
                             "type": .string("integer"),
-                            "description": .string("下沉行數（2-10，預設 3）")
+                            "description": .string("Number of sinking rows (2-10, default 3)")
                         ]),
                         "distance": .object([
                             "type": .string("integer"),
-                            "description": .string("與文字的距離（twips，預設 0）")
+                            "description": .string("Distance from text (twips, default 0)")
                         ]),
                         "font": .object([
                             "type": .string("string"),
-                            "description": .string("首字字型（可選）")
+                            "description": .string("First letter font (optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
                 ])
             ),
 
-            // 10.8 insert_horizontal_line - 水平線
             Tool(
                 name: "insert_horizontal_line",
-                description: "在指定段落插入水平線（段落邊框方式）",
+                description: "Insert a horizontal line in the specified paragraph (paragraph border mode)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始），水平線會加在該段落下方")
+                            "description": .string("Paragraph index (starting from 0), a horizontal line will be added below the paragraph")
                         ]),
                         "style": .object([
                             "type": .string("string"),
-                            "description": .string("線條樣式：single（單線，預設）、double（雙線）、dotted（點線）、dashed（虛線）、thick（粗線）")
+                            "description": .string("Line style: single (single line, default), double (double line), dotted (dotted line), dashed (dashed line), thick (thick line)")
                         ]),
                         "color": .object([
                             "type": .string("string"),
-                            "description": .string("線條顏色（RGB 十六進位，預設 000000）")
+                            "description": .string("Line color (RGB hex, default 000000)")
                         ]),
                         "size": .object([
                             "type": .string("integer"),
-                            "description": .string("線條粗細（1/8 點，預設 12 = 1.5pt）")
+                            "description": .string("Line thickness (1/8 point, default 12 = 1.5pt)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
                 ])
             ),
 
-            // 10.9 set_widow_orphan - 避頭尾控制
             Tool(
                 name: "set_widow_orphan",
-                description: "設定段落避頭尾（孤行/寡行控制）",
+                description: "Set paragraphs to avoid beginning and ending (lone line/few lines control)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始），不指定則套用全文件")
+                            "description": .string("Paragraph index (starting from 0), if not specified, the entire document will be applied")
                         ]),
                         "enable": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否啟用避頭尾（預設 true）")
+                            "description": .string("Whether to enable head and tail avoidance (default true)")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 10.10 set_keep_with_next - 與下段同頁
             Tool(
                 name: "set_keep_with_next",
-                description: "設定段落與下一段同頁（避免分頁時分離）",
+                description: "Set the paragraph to be on the same page as the next paragraph (to avoid separation during paging)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "enable": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否啟用與下段同頁（預設 true）")
+                            "description": .string("Whether to enable the same page as the next paragraph (default true)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
                 ])
             ),
 
-            // ==================== Phase 2: 浮水印與文件保護 ====================
 
-            // 11.1 insert_watermark - 文字浮水印
             Tool(
                 name: "insert_watermark",
-                description: "插入文字浮水印（斜向置中於頁面背景）",
+                description: "Insert text watermark (centered diagonally on the page background)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "text": .object([
                             "type": .string("string"),
-                            "description": .string("浮水印文字（如「機密」、「草稿」、「CONFIDENTIAL」）")
+                            "description": .string("Watermark text (such as \"CONFIDENTIAL\", \"DRAFT\", \"CONFIDENTIAL\")")
                         ]),
                         "font": .object([
                             "type": .string("string"),
-                            "description": .string("字型名稱（預設 Calibri Light）")
+                            "description": .string("Font name (Default Calibri Light)")
                         ]),
                         "color": .object([
                             "type": .string("string"),
-                            "description": .string("文字顏色（RGB 十六進位，預設 C0C0C0 淡灰色）")
+                            "description": .string("Text color (RGB hexadecimal, default C0C0C0 light gray)")
                         ]),
                         "size": .object([
                             "type": .string("integer"),
-                            "description": .string("字型大小（點數，預設 72）")
+                            "description": .string("Font size (points, default 72)")
                         ]),
                         "semitransparent": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否半透明（預設 true）")
+                            "description": .string("Whether to be translucent (default true)")
                         ]),
                         "rotation": .object([
                             "type": .string("integer"),
-                            "description": .string("旋轉角度（度，預設 -45 為斜向）")
+                            "description": .string("Rotation angle (degrees, default -45 is oblique)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("text")])
                 ])
             ),
 
-            // 11.2 insert_image_watermark - 圖片浮水印
             Tool(
                 name: "insert_image_watermark",
-                description: "插入圖片浮水印（置中於頁面背景）",
+                description: "Insert image watermark (centered on page background)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "image_path": .object([
                             "type": .string("string"),
-                            "description": .string("圖片檔案路徑")
+                            "description": .string("Image file path")
                         ]),
                         "scale": .object([
                             "type": .string("integer"),
-                            "description": .string("縮放比例（百分比，預設 100）")
+                            "description": .string("Scaling (percentage, default 100)")
                         ]),
                         "washout": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否淡化處理（預設 true）")
+                            "description": .string("Whether to fade processing (default true)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("image_path")])
                 ])
             ),
 
-            // 11.3 remove_watermark - 移除浮水印
             Tool(
                 name: "remove_watermark",
-                description: "移除文件的浮水印",
+                description: "Remove watermarks from files",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 11.4 protect_document - 文件保護
             Tool(
                 name: "protect_document",
-                description: "設定文件保護（限制編輯、唯讀等）",
+                description: "Set file protection (restrict editing, read only, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "protection_type": .object([
                             "type": .string("string"),
-                            "description": .string("保護類型：readOnly（唯讀）、comments（僅允許註解）、trackedChanges（僅允許追蹤修訂）、forms（僅允許表單填寫）")
+                            "description": .string("Protection type: readOnly (read only), comments (only comments allowed), trackedChanges (only tracked changes allowed), forms (only form filling allowed)")
                         ]),
                         "password": .object([
                             "type": .string("string"),
-                            "description": .string("保護密碼（可選）")
+                            "description": .string("Protect password (optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("protection_type")])
                 ])
             ),
 
-            // 11.5 unprotect_document - 移除文件保護
             Tool(
                 name: "unprotect_document",
-                description: "移除文件保護",
+                description: "Remove file protection",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "password": .object([
                             "type": .string("string"),
-                            "description": .string("保護密碼（如有設定）")
+                            "description": .string("Protection password (if set)")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 11.6 set_document_password - 設定開啟密碼
             Tool(
                 name: "set_document_password",
-                description: "設定文件開啟密碼（加密保護）",
+                description: "Set file opening password (encryption protection)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "password": .object([
                             "type": .string("string"),
-                            "description": .string("開啟密碼")
+                            "description": .string("Open password")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("password")])
                 ])
             ),
 
-            // 11.7 remove_document_password - 移除開啟密碼
             Tool(
                 name: "remove_document_password",
-                description: "移除文件開啟密碼",
+                description: "Remove file opening password",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "current_password": .object([
                             "type": .string("string"),
-                            "description": .string("目前的開啟密碼")
+                            "description": .string("Current activation password")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("current_password")])
                 ])
             ),
 
-            // 11.8 restrict_editing_region - 限制編輯區域
             Tool(
                 name: "restrict_editing_region",
-                description: "設定可編輯區域（其他區域受保護）",
+                description: "Set editable area (other areas are protected)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "start_paragraph": .object([
                             "type": .string("integer"),
-                            "description": .string("可編輯區域起始段落索引")
+                            "description": .string("Editable area starting paragraph index")
                         ]),
                         "end_paragraph": .object([
                             "type": .string("integer"),
-                            "description": .string("可編輯區域結束段落索引")
+                            "description": .string("End of editable area paragraph index")
                         ]),
                         "editor": .object([
                             "type": .string("string"),
-                            "description": .string("允許編輯的使用者/群組（可選）")
+                            "description": .string("Users/groups allowed to edit (optional)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("start_paragraph"), .string("end_paragraph")])
                 ])
             ),
 
-            // ==================== Phase 3: 學術功能（部分） ====================
 
-            // 12.1 insert_caption - 插入圖表標號
             Tool(
                 name: "insert_caption",
-                description: "為圖片或表格插入標號（如「圖 1」、「表 1」）",
+                description: "Insert labels for pictures or tables (such as \"Figure 1\", \"Table 1\")",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置段落索引")
+                            "description": .string("Insertion position paragraph index")
                         ]),
                         "label": .object([
                             "type": .string("string"),
-                            "description": .string("標號類型：Figure（圖）、Table（表）、Equation（公式）")
+                            "description": .string("Label type: Figure, Table, Equation")
                         ]),
                         "caption_text": .object([
                             "type": .string("string"),
-                            "description": .string("標號說明文字")
+                            "description": .string("Label description text")
                         ]),
                         "position": .object([
                             "type": .string("string"),
-                            "description": .string("標號位置：above（上方）、below（下方，預設）")
+                            "description": .string("Label position: above (above), below (below, default)")
                         ]),
                         "include_chapter_number": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否包含章節編號（如「圖 2-1」）")
+                            "description": .string("Whether to include the chapter number (such as \"Figure 2-1\")")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("label")])
                 ])
             ),
 
-            // 12.2 insert_cross_reference - 插入交互參照
             Tool(
                 name: "insert_cross_reference",
-                description: "插入交互參照（連結到書籤、標題、圖表標號等）",
+                description: "Insert cross-references (links to bookmarks, titles, chart labels, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置段落索引")
+                            "description": .string("Insertion position paragraph index")
                         ]),
                         "reference_type": .object([
                             "type": .string("string"),
-                            "description": .string("參照類型：bookmark（書籤）、heading（標題）、figure（圖）、table（表）、equation（公式）")
+                            "description": .string("Reference types: bookmark, heading, figure, table, equation")
                         ]),
                         "reference_target": .object([
                             "type": .string("string"),
-                            "description": .string("參照目標名稱或 ID")
+                            "description": .string("Reference target name or ID")
                         ]),
                         "format": .object([
                             "type": .string("string"),
-                            "description": .string("顯示格式：full（完整，如「圖 1」）、numberOnly（僅編號）、pageNumber（頁碼）、text（僅文字）")
+                            "description": .string("Display format: full (complete, such as \"Figure 1\"), numberOnly (number only), pageNumber (page number), text (text only)")
                         ]),
                         "include_hyperlink": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否加入超連結（預設 true）")
+                            "description": .string("Whether to add hyperlinks (default true)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("reference_type"), .string("reference_target")])
                 ])
             ),
 
-            // 12.3 insert_table_of_figures - 插入圖表目錄
             Tool(
                 name: "insert_table_of_figures",
-                description: "插入圖表目錄",
+                description: "Insert chart catalog",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置段落索引")
+                            "description": .string("Insertion position paragraph index")
                         ]),
                         "caption_label": .object([
                             "type": .string("string"),
-                            "description": .string("標號類型：Figure（圖）、Table（表）、Equation（公式）")
+                            "description": .string("Label type: Figure, Table, Equation")
                         ]),
                         "include_page_numbers": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否包含頁碼（預設 true）")
+                            "description": .string("Whether to include page numbers (default true)")
                         ]),
                         "right_align_page_numbers": .object([
                             "type": .string("boolean"),
-                            "description": .string("頁碼是否靠右對齊（預設 true）")
+                            "description": .string("Whether the page number is aligned to the right (default true)")
                         ]),
                         "tab_leader": .object([
                             "type": .string("string"),
-                            "description": .string("定位點前導字元：dot（點線）、hyphen（連字號）、underscore（底線）、none（無）")
+                            "description": .string("Anchor point leading characters: dot (dotted line), hyphen (hyphen), underscore (underline), none (none)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("caption_label")])
                 ])
             ),
 
-            // 12.4 insert_index_entry - 標記索引項目
             Tool(
                 name: "insert_index_entry",
-                description: "標記文字為索引項目（用於生成索引）",
+                description: "Mark text as an index item (used to generate the index)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("包含要標記文字的段落索引")
+                            "description": .string("Index of the paragraph containing the text to be tagged")
                         ]),
                         "main_entry": .object([
                             "type": .string("string"),
-                            "description": .string("主索引詞")
+                            "description": .string("main index term")
                         ]),
                         "sub_entry": .object([
                             "type": .string("string"),
-                            "description": .string("子索引詞（可選）")
+                            "description": .string("Sub-index term (optional)")
                         ]),
                         "cross_reference": .object([
                             "type": .string("string"),
-                            "description": .string("交互參照（如「參見 XXX」）")
+                            "description": .string("Cross-reference (such as \"See XXX\")")
                         ]),
                         "bold": .object([
                             "type": .string("boolean"),
-                            "description": .string("頁碼是否粗體（預設 false）")
+                            "description": .string("Whether the page number is bold (default false)")
                         ]),
                         "italic": .object([
                             "type": .string("boolean"),
-                            "description": .string("頁碼是否斜體（預設 false）")
+                            "description": .string("Whether the page number is italicized (default false)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("main_entry")])
                 ])
             ),
 
-            // 12.5 insert_index - 插入索引
             Tool(
                 name: "insert_index",
-                description: "插入索引（根據已標記的索引項目）",
+                description: "Insert index (based on marked index items)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置段落索引")
+                            "description": .string("Insertion position paragraph index")
                         ]),
                         "columns": .object([
                             "type": .string("integer"),
-                            "description": .string("索引欄數（1-4，預設 2）")
+                            "description": .string("Number of index columns (1-4, default 2)")
                         ]),
                         "right_align_page_numbers": .object([
                             "type": .string("boolean"),
-                            "description": .string("頁碼是否靠右對齊（預設 true）")
+                            "description": .string("Whether the page number is aligned to the right (default true)")
                         ]),
                         "tab_leader": .object([
                             "type": .string("string"),
-                            "description": .string("定位點前導字元：dot（點線）、hyphen（連字號）、underscore（底線）、none（無）")
+                            "description": .string("Anchor point leading characters: dot (dotted line), hyphen (hyphen), underscore (underline), none (none)")
                         ]),
                         "run_in": .object([
                             "type": .string("boolean"),
-                            "description": .string("子項目是否接續顯示（預設 false）")
+                            "description": .string("Whether sub-items are displayed continuously (default false)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
                 ])
             ),
 
-            // ==================== Phase 4: 其他重要功能 ====================
 
-            // 13.1 set_language - 設定校訂語言
             Tool(
                 name: "set_language",
-                description: "設定文字的校訂語言（用於拼字檢查）",
+                description: "Set the proofreading language for text (used for spell checking)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "language": .object([
                             "type": .string("string"),
-                            "description": .string("語言代碼（如 en-US、zh-TW、ja-JP）")
+                            "description": .string("Language code (such as en-US, zh-TW, ja-JP)")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（不指定則套用全文件）")
+                            "description": .string("Paragraph index (if not specified, the entire document will be applied)")
                         ]),
                         "no_proofing": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否停用校訂（預設 false）")
+                            "description": .string("Whether to disable redaction (default false)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("language")])
                 ])
             ),
 
-            // 13.2 set_keep_lines - 段落不分頁
             Tool(
                 name: "set_keep_lines",
-                description: "設定段落不分頁（整個段落保持在同一頁）",
+                description: "Set paragraphs not to be paged (the entire paragraph remains on the same page)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "enable": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否啟用段落不分頁（預設 true）")
+                            "description": .string("Whether to enable paragraph non-pagination (default true)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
                 ])
             ),
 
-            // 13.3 insert_tab_stop - 設定定位點
             Tool(
                 name: "insert_tab_stop",
-                description: "在段落中設定定位點",
+                description: "Set anchor point in paragraph",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "position": .object([
                             "type": .string("integer"),
-                            "description": .string("定位點位置（twips，從左邊界算起）")
+                            "description": .string("Anchor position (twips, counted from the left border)")
                         ]),
                         "alignment": .object([
                             "type": .string("string"),
-                            "description": .string("對齊方式：left（靠左）、center（置中）、right（靠右）、decimal（小數點對齊）")
+                            "description": .string("Alignment: left, center, right, decimal (decimal point alignment)")
                         ]),
                         "leader": .object([
                             "type": .string("string"),
-                            "description": .string("前導字元：none（無）、dot（點線）、hyphen（連字號）、underscore（底線）")
+                            "description": .string("Leading characters: none, dot, hyphen, underscore")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("position")])
                 ])
             ),
 
-            // 13.4 clear_tab_stops - 清除定位點
             Tool(
                 name: "clear_tab_stops",
-                description: "清除段落的所有定位點",
+                description: "Clear all anchor points of paragraph",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
                 ])
             ),
 
-            // 13.5 set_page_break_before - 段落前分頁
             Tool(
                 name: "set_page_break_before",
-                description: "設定段落前分頁（段落從新頁開始）",
+                description: "Set pagination before paragraph (paragraph starts on new page)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "enable": .object([
                             "type": .string("boolean"),
-                            "description": .string("是否啟用段落前分頁（預設 true）")
+                            "description": .string("Whether to enable pagination before paragraphs (default true)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
                 ])
             ),
 
-            // 13.6 set_outline_level - 設定大綱層級
             Tool(
                 name: "set_outline_level",
-                description: "設定段落的大綱層級（用於生成目錄和導覽）",
+                description: "Set the outline level of paragraphs (used to generate tables of contents and navigation)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("段落索引（從 0 開始）")
+                            "description": .string("Paragraph index (starting from 0)")
                         ]),
                         "level": .object([
                             "type": .string("integer"),
-                            "description": .string("大綱層級（1-9，或 0 表示本文）")
+                            "description": .string("Outline level (1-9, or 0 for this article)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index"), .string("level")])
                 ])
             ),
 
-            // 13.7 insert_continuous_section_break - 連續分節符
             Tool(
                 name: "insert_continuous_section_break",
-                description: "插入連續分節符（不換頁的分節）",
+                description: "Insert continuous section breaks (section breaks without page breaks)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "paragraph_index": .object([
                             "type": .string("integer"),
-                            "description": .string("插入位置段落索引")
+                            "description": .string("Insertion position paragraph index")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
                 ])
             ),
 
-            // 13.8 get_section_properties - 取得節屬性
             Tool(
                 name: "get_section_properties",
-                description: "取得文件的節屬性（頁面設定等）",
+                description: "Get the section attributes of the file (page settings, etc.)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
                 ])
             ),
 
-            // 13.9 add_row_to_table - 新增表格列
             Tool(
                 name: "add_row_to_table",
-                description: "在表格中新增一列",
+                description: "Add a new column to the table",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "position": .object([
                             "type": .string("string"),
-                            "description": .string("插入位置：end（最後）、start（最前）、after_row（指定列之後）")
+                            "description": .string("Insertion position: end (last), start (front), after_row (after the specified column)")
                         ]),
                         "row_index": .object([
                             "type": .string("integer"),
-                            "description": .string("當 position=after_row 時，指定在哪一列之後插入")
+                            "description": .string("When position=after_row, specify the column to insert after")
                         ]),
                         "data": .object([
                             "type": .string("array"),
-                            "description": .string("新列的儲存格資料陣列")
+                            "description": .string("Array of cell data for new column")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index")])
                 ])
             ),
 
-            // 13.10 add_column_to_table - 新增表格欄
             Tool(
                 name: "add_column_to_table",
-                description: "在表格中新增一欄",
+                description: "Add a new column to the table",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "position": .object([
                             "type": .string("string"),
-                            "description": .string("插入位置：end（最後）、start（最前）、after_col（指定欄之後）")
+                            "description": .string("Insertion position: end (last), start (front), after_col (after the specified column)")
                         ]),
                         "col_index": .object([
                             "type": .string("integer"),
-                            "description": .string("當 position=after_col 時，指定在哪一欄之後插入")
+                            "description": .string("When position=after_col, specify the column to insert after")
                         ]),
                         "data": .object([
                             "type": .string("array"),
-                            "description": .string("新欄的儲存格資料陣列")
+                            "description": .string("Array of cell data for new column")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index")])
                 ])
             ),
 
-            // 13.11 delete_row_from_table - 刪除表格列
             Tool(
                 name: "delete_row_from_table",
-                description: "從表格中刪除一列",
+                description: "Delete a column from the table",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "row_index": .object([
                             "type": .string("integer"),
-                            "description": .string("要刪除的列索引（從 0 開始）")
+                            "description": .string("Column index to delete (0-based)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index"), .string("row_index")])
                 ])
             ),
 
-            // 13.12 delete_column_from_table - 刪除表格欄
             Tool(
                 name: "delete_column_from_table",
-                description: "從表格中刪除一欄",
+                description: "Remove a column from the table",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "col_index": .object([
                             "type": .string("integer"),
-                            "description": .string("要刪除的欄索引（從 0 開始）")
+                            "description": .string("Column index to delete (starting from 0)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index"), .string("col_index")])
                 ])
             ),
 
-            // 13.13 set_cell_width - 設定儲存格寬度
             Tool(
                 name: "set_cell_width",
-                description: "設定表格儲存格寬度",
+                description: "Set table cell width",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "row": .object([
                             "type": .string("integer"),
-                            "description": .string("列索引（從 0 開始）")
+                            "description": .string("Column index (starting from 0)")
                         ]),
                         "col": .object([
                             "type": .string("integer"),
-                            "description": .string("欄索引（從 0 開始）")
+                            "description": .string("Column index (starting from 0)")
                         ]),
                         "width": .object([
                             "type": .string("integer"),
-                            "description": .string("寬度（twips）")
+                            "description": .string("Width (twips)")
                         ]),
                         "width_type": .object([
                             "type": .string("string"),
-                            "description": .string("寬度類型：dxa（固定 twips）、pct（百分比）、auto（自動）")
+                            "description": .string("Width type: dxa (fixed twips), pct (percentage), auto (automatic)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index"), .string("row"), .string("col"), .string("width")])
                 ])
             ),
 
-            // 13.14 set_row_height - 設定列高
             Tool(
                 name: "set_row_height",
-                description: "設定表格列高",
+                description: "Set table column height",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "row_index": .object([
                             "type": .string("integer"),
-                            "description": .string("列索引（從 0 開始）")
+                            "description": .string("Column index (starting from 0)")
                         ]),
                         "height": .object([
                             "type": .string("integer"),
-                            "description": .string("高度（twips）")
+                            "description": .string("height(twips)")
                         ]),
                         "height_rule": .object([
                             "type": .string("string"),
-                            "description": .string("高度規則：auto（自動）、atLeast（最小）、exact（固定）")
+                            "description": .string("Height rules: auto (automatic), atLeast (minimum), exact (fixed)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index"), .string("row_index"), .string("height")])
                 ])
             ),
 
-            // 13.15 set_table_alignment - 設定表格對齊
             Tool(
                 name: "set_table_alignment",
-                description: "設定表格在頁面上的對齊方式",
+                description: "Set the alignment of the table on the page",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "alignment": .object([
                             "type": .string("string"),
-                            "description": .string("對齊方式：left（靠左）、center（置中）、right（靠右）")
+                            "description": .string("Alignment: left, center, right")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index"), .string("alignment")])
                 ])
             ),
 
-            // 13.16 set_cell_vertical_alignment - 設定儲存格垂直對齊
             Tool(
                 name: "set_cell_vertical_alignment",
-                description: "設定表格儲存格的垂直對齊方式",
+                description: "Set vertical alignment of table cells",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "row": .object([
                             "type": .string("integer"),
-                            "description": .string("列索引（從 0 開始）")
+                            "description": .string("Column index (starting from 0)")
                         ]),
                         "col": .object([
                             "type": .string("integer"),
-                            "description": .string("欄索引（從 0 開始）")
+                            "description": .string("Column index (starting from 0)")
                         ]),
                         "alignment": .object([
                             "type": .string("string"),
-                            "description": .string("垂直對齊：top（頂端）、center（置中）、bottom（底端）")
+                            "description": .string("Vertical alignment: top, center, bottom")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index"), .string("row"), .string("col"), .string("alignment")])
                 ])
             ),
 
-            // 13.17 set_header_row - 設定標題列
             Tool(
                 name: "set_header_row",
-                description: "設定表格標題列（跨頁時重複顯示）",
+                description: "Set the table title column (repeated when spanning two pages)",
                 inputSchema: .object([
                     "type": .string("object"),
                     "properties": .object([
                         "doc_id": .object([
                             "type": .string("string"),
-                            "description": .string("文件識別碼")
+                            "description": .string("file identification code")
                         ]),
                         "table_index": .object([
                             "type": .string("integer"),
-                            "description": .string("表格索引（從 0 開始）")
+                            "description": .string("Table index (starting from 0)")
                         ]),
                         "row_count": .object([
                             "type": .string("integer"),
-                            "description": .string("標題列數量（從第一列算起，預設 1）")
+                            "description": .string("Number of title columns (counting from the first column, default 1)")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("table_index")])
@@ -3812,7 +3718,6 @@ class WordMCPServer {
 
     private func executeToolTask(name: String, args: [String: Value]) async throws -> String {
         switch name {
-        // 文件管理
         case "create_document":
             return try await createDocument(args: args)
         case "open_document":
@@ -3826,7 +3731,6 @@ class WordMCPServer {
         case "get_document_info":
             return try await getDocumentInfo(args: args)
 
-        // 內容操作
         case "get_text":
             return try await getText(args: args)
         case "get_paragraphs":
@@ -3840,7 +3744,6 @@ class WordMCPServer {
         case "replace_text":
             return try await replaceText(args: args)
 
-        // 格式化
         case "format_text":
             return try await formatText(args: args)
         case "set_paragraph_format":
@@ -3848,7 +3751,6 @@ class WordMCPServer {
         case "apply_style":
             return try await applyStyle(args: args)
 
-        // 表格
         case "insert_table":
             return try await insertTable(args: args)
         case "get_tables":
@@ -3862,7 +3764,6 @@ class WordMCPServer {
         case "set_table_style":
             return try await setTableStyle(args: args)
 
-        // 樣式管理
         case "list_styles":
             return try await listStyles(args: args)
         case "create_style":
@@ -3872,7 +3773,6 @@ class WordMCPServer {
         case "delete_style":
             return try await deleteStyle(args: args)
 
-        // 清單/編號
         case "insert_bullet_list":
             return try await insertBulletList(args: args)
         case "insert_numbered_list":
@@ -3880,7 +3780,6 @@ class WordMCPServer {
         case "set_list_level":
             return try await setListLevel(args: args)
 
-        // 頁面設定
         case "set_page_size":
             return try await setPageSize(args: args)
         case "set_page_margins":
@@ -3892,7 +3791,6 @@ class WordMCPServer {
         case "insert_section_break":
             return try await insertSectionBreak(args: args)
 
-        // 頁首/頁尾
         case "add_header":
             return try await addHeader(args: args)
         case "update_header":
@@ -3904,7 +3802,6 @@ class WordMCPServer {
         case "insert_page_number":
             return try await insertPageNumber(args: args)
 
-        // 圖片
         case "insert_image":
             return try await insertImage(args: args)
         case "insert_image_from_path":
@@ -3922,13 +3819,11 @@ class WordMCPServer {
         case "set_image_style":
             return try await setImageStyle(args: args)
 
-        // 匯出
         case "export_text":
             return try await exportText(args: args)
         case "export_markdown":
             return try await exportMarkdown(args: args)
 
-        // 超連結和書籤
         case "insert_hyperlink":
             return try await insertHyperlink(args: args)
         case "insert_internal_link":
@@ -3942,7 +3837,6 @@ class WordMCPServer {
         case "delete_bookmark":
             return try await deleteBookmark(args: args)
 
-        // 註解和修訂
         case "insert_comment":
             return try await insertComment(args: args)
         case "update_comment":
@@ -3960,7 +3854,6 @@ class WordMCPServer {
         case "reject_revision":
             return try await rejectRevision(args: args)
 
-        // 腳註/尾註
         case "insert_footnote":
             return try await insertFootnote(args: args)
         case "delete_footnote":
@@ -3970,7 +3863,6 @@ class WordMCPServer {
         case "delete_endnote":
             return try await deleteEndnote(args: args)
 
-        // 進階功能 (P7)
         case "insert_toc":
             return try await insertTOC(args: args)
         case "insert_text_field":
@@ -3990,17 +3882,14 @@ class WordMCPServer {
         case "set_text_effect":
             return try await setTextEffect(args: args)
 
-        // 8.1 註解回覆與解析
         case "reply_to_comment":
             return try await replyToComment(args: args)
         case "resolve_comment":
             return try await resolveComment(args: args)
 
-        // 8.2 浮動圖片
         case "insert_floating_image":
             return try await insertFloatingImage(args: args)
 
-        // 8.3 欄位代碼
         case "insert_if_field":
             return try await insertIfField(args: args)
         case "insert_calculation_field":
@@ -4014,13 +3903,11 @@ class WordMCPServer {
         case "insert_sequence_field":
             return try await insertSequenceField(args: args)
 
-        // 8.4 內容控制項（SDT）
         case "insert_content_control":
             return try await insertContentControl(args: args)
         case "insert_repeating_section":
             return try await insertRepeatingSection(args: args)
 
-        // 9. 新增功能 (P9)
         case "insert_text":
             return try await insertText(args: args)
         case "get_document_text":
@@ -4060,7 +3947,6 @@ class WordMCPServer {
         case "compare_documents":
             return try await compareDocuments(args: args)
 
-        // Phase 1: 進階排版功能
         case "set_columns":
             return try await setColumns(args: args)
         case "insert_column_break":
@@ -4082,7 +3968,6 @@ class WordMCPServer {
         case "set_keep_with_next":
             return try await setKeepWithNext(args: args)
 
-        // Phase 2: 浮水印與文件保護
         case "insert_watermark":
             return try await insertWatermark(args: args)
         case "insert_image_watermark":
@@ -4100,7 +3985,6 @@ class WordMCPServer {
         case "restrict_editing_region":
             return try await restrictEditingRegion(args: args)
 
-        // Phase 3: 學術功能
         case "insert_caption":
             return try await insertCaption(args: args)
         case "insert_cross_reference":
@@ -4112,7 +3996,6 @@ class WordMCPServer {
         case "insert_index":
             return try await insertIndex(args: args)
 
-        // Phase 4: 其他重要功能
         case "set_language":
             return try await setLanguage(args: args)
         case "set_keep_lines":
@@ -4380,7 +4263,7 @@ class WordMCPServer {
         if let bold = args["bold"]?.boolValue { format.bold = bold }
         if let italic = args["italic"]?.boolValue { format.italic = italic }
         if let underline = args["underline"]?.boolValue { format.underline = underline ? .single : nil }
-        if let fontSize = args["font_size"]?.intValue { format.fontSize = fontSize * 2 } // 轉換為半點
+        if let fontSize = args["font_size"]?.intValue { format.fontSize = fontSize * 2 }
         if let fontName = args["font_name"]?.stringValue { format.fontName = fontName }
         if let color = args["color"]?.stringValue { format.color = color }
 
@@ -4406,11 +4289,11 @@ class WordMCPServer {
             props.alignment = Alignment(rawValue: alignment)
         }
         if let lineSpacing = args["line_spacing"]?.doubleValue {
-            props.spacing = Spacing(line: Int(lineSpacing * 240)) // 轉換為 1/240 點
+            props.spacing = Spacing(line: Int(lineSpacing * 240))
         }
         if let spaceBefore = args["space_before"]?.intValue {
             if props.spacing == nil { props.spacing = Spacing() }
-            props.spacing?.before = spaceBefore * 20 // 轉換為 1/20 點
+            props.spacing?.before = spaceBefore * 20
         }
         if let spaceAfter = args["space_after"]?.intValue {
             if props.spacing == nil { props.spacing = Spacing() }
@@ -4461,7 +4344,6 @@ class WordMCPServer {
 
         var table = Table(rowCount: rows, columnCount: cols)
 
-        // 如果有提供資料，填入表格
         if let dataArray = args["data"]?.arrayValue {
             for (rowIndex, rowData) in dataArray.enumerated() {
                 if let rowArray = rowData.arrayValue {
@@ -4506,7 +4388,6 @@ class WordMCPServer {
             let cols = table.rows.first?.cells.count ?? 0
             result += "[\(index)] \(rows)x\(cols) table\n"
 
-            // 顯示表格內容預覽
             for (rowIdx, row) in table.rows.prefix(3).enumerated() {
                 let cellPreviews = row.cells.prefix(3).map { cell -> String in
                     let preview = String(cell.getText().prefix(15))
@@ -4625,7 +4506,6 @@ class WordMCPServer {
 
         var results: [String] = []
 
-        // 設定邊框
         if let borderStyle = args["border_style"]?.stringValue {
             let style = BorderStyle(rawValue: borderStyle) ?? .single
             let size = args["border_size"]?.intValue ?? 4
@@ -4638,7 +4518,6 @@ class WordMCPServer {
             results.append("Set border style: \(borderStyle)")
         }
 
-        // 設定儲存格底色
         if let cellRow = args["cell_row"]?.intValue,
            let cellCol = args["cell_col"]?.intValue,
            let shadingColor = args["shading_color"]?.stringValue {
@@ -4676,7 +4555,6 @@ class WordMCPServer {
             let basedOnInfo = style.basedOn.map { " [based on: \($0)]" } ?? ""
             result += "- \(style.id) (\(style.name)) - \(style.type.rawValue)\(defaultMark)\(basedOnInfo)\n"
 
-            // 顯示格式資訊
             if let runProps = style.runProperties {
                 var formats: [String] = []
                 if let fontName = runProps.fontName { formats.append("font: \(fontName)") }
@@ -4706,11 +4584,9 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        // 解析樣式類型
         let typeStr = args["type"]?.stringValue ?? "paragraph"
         let styleType = StyleType(rawValue: typeStr) ?? .paragraph
 
-        // 解析段落屬性
         var paraProps = ParagraphProperties()
         if let alignment = args["alignment"]?.stringValue {
             paraProps.alignment = Alignment(rawValue: alignment)
@@ -4724,7 +4600,6 @@ class WordMCPServer {
             paraProps.spacing?.after = spaceAfter * 20
         }
 
-        // 解析 Run 屬性
         var runProps = RunProperties()
         if let fontName = args["font_name"]?.stringValue { runProps.fontName = fontName }
         if let fontSize = args["font_size"]?.intValue { runProps.fontSize = fontSize * 2 }
@@ -4761,7 +4636,6 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        // 建立更新資料
         var paraProps: ParagraphProperties? = nil
         if let alignment = args["alignment"]?.stringValue {
             paraProps = ParagraphProperties()
@@ -4904,11 +4778,9 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        // 優先使用預設名稱
         if let preset = args["preset"]?.stringValue {
             try doc.setPageMargins(name: preset)
         } else {
-            // 使用自訂值
             let top = args["top"]?.intValue
             let right = args["right"]?.intValue
             let bottom = args["bottom"]?.intValue
@@ -5054,7 +4926,6 @@ class WordMCPServer {
         if let text = args["text"]?.stringValue {
             footer = doc.addFooter(text: text, type: footerType)
         } else {
-            // 沒有提供文字，使用頁碼
             footer = doc.addFooterWithPageNumber(format: .simple, type: footerType)
         }
 
@@ -5091,7 +4962,6 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        // 解析頁碼格式
         let formatStr = args["format"]?.stringValue ?? "simple"
         let format: PageNumberFormat
         switch formatStr.lowercased() {
@@ -5099,7 +4969,6 @@ class WordMCPServer {
         case "pageoftotal": format = .pageOfTotal
         case "withdash": format = .withDash
         default:
-            // 自訂格式（包含 # 的字串）
             if formatStr.contains("#") {
                 format = .withText(formatStr)
             } else {
@@ -5171,7 +5040,6 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        // 檢查檔案是否存在
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: path) else {
             throw WordError.fileNotFound(path)
@@ -5259,7 +5127,6 @@ class WordMCPServer {
         return result
     }
 
-    // MARK: - 9.17 export_image - 匯出單一圖片
     private func exportImage(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -5274,24 +5141,20 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        // 找到對應的圖片
         guard let imageRef = doc.images.first(where: { $0.id == imageId }) else {
-            throw WordError.parseError("找不到圖片 ID: \(imageId)")
+            throw WordError.parseError("Image ID not found: \(imageId)")
         }
 
-        // 確保目錄存在
         let url = URL(fileURLWithPath: savePath)
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        // 寫入檔案
         try imageRef.data.write(to: url)
 
         let sizeKB = imageRef.data.count / 1024
         return "Saved image \(imageId) to \(savePath) (\(sizeKB)KB)"
     }
 
-    // MARK: - 9.18 export_all_images - 匯出所有圖片
     private func exportAllImages(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -5308,7 +5171,6 @@ class WordMCPServer {
             return "No images to export"
         }
 
-        // 建立輸出目錄
         let dirURL = URL(fileURLWithPath: outputDir)
         try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
 
@@ -5388,7 +5250,6 @@ class WordMCPServer {
             throw WordError.fileNotFound(sourcePath)
         }
 
-        // 檢查 Word lock file
         let sourceURL = URL(fileURLWithPath: sourcePath)
         let lockFile = sourceURL.deletingLastPathComponent()
             .appendingPathComponent("~$" + sourceURL.lastPathComponent)
@@ -5398,7 +5259,6 @@ class WordMCPServer {
 
         let document = try DocxReader.read(from: sourceURL)
 
-        // 圖片輸出目錄：預設與 .md 同層的 figures/
         let figuresDir: URL
         if let customFigDir = args["figures_directory"]?.stringValue {
             figuresDir = URL(fileURLWithPath: customFigDir)
@@ -5408,7 +5268,6 @@ class WordMCPServer {
                 .appendingPathComponent("figures")
         }
 
-        // 建立轉換選項（預設 Tier 2：Markdown + 圖片提取）
         let options = ConversionOptions(
             includeFrontmatter: args["include_frontmatter"]?.boolValue ?? false,
             hardLineBreaks: args["hard_line_breaks"]?.boolValue ?? false,
@@ -5416,10 +5275,8 @@ class WordMCPServer {
             figuresDirectory: figuresDir
         )
 
-        // 轉換為 Markdown
         let markdown = try wordConverter.convertToString(document: document, options: options)
 
-        // 寫入檔案
         try markdown.write(toFile: outputPath, atomically: true, encoding: .utf8)
         let figCount = (try? FileManager.default.contentsOfDirectory(atPath: figuresDir.path))?.count ?? 0
         if figCount > 0 {
@@ -5891,7 +5748,6 @@ class WordMCPServer {
             throw WordError.missingParameter("options")
         }
 
-        // 解析 options array
         var options: [String] = []
         if case .array(let arr) = optionsValue {
             for item in arr {
@@ -5949,11 +5805,9 @@ class WordMCPServer {
         let color = args["color"]?.stringValue ?? "000000"
         let space = args["space"]?.intValue ?? 1
 
-        // 解析邊框類型
         let borderType = ParagraphBorderType(rawValue: typeStr) ?? .single
         let borderStyle = ParagraphBorderStyle(type: borderType, color: color, size: size, space: space)
 
-        // 解析要套用的邊
         var topStyle: ParagraphBorderStyle? = borderStyle
         var bottomStyle: ParagraphBorderStyle? = borderStyle
         var leftStyle: ParagraphBorderStyle? = borderStyle
@@ -6054,7 +5908,6 @@ class WordMCPServer {
             throw WordError.missingParameter("effect")
         }
 
-        // TextEffect 是 enum：blinkBackground, lights, antsBlack, antsRed, shimmer, sparkle, none
         guard let effect = TextEffect(rawValue: effectType) else {
             throw WordError.invalidParameter("effect", "Unknown effect type: \(effectType). Valid: blinkBackground, lights, antsBlack, antsRed, shimmer, sparkle, none")
         }
@@ -6082,7 +5935,6 @@ class WordMCPServer {
         }
         let author = args["author"]?.stringValue ?? "User"
 
-        // 使用 CommentsCollection.addReply 方法
         guard let reply = doc.comments.addReply(to: commentId, author: author, text: replyText) else {
             throw WordError.invalidParameter("comment_id", "Comment with ID \(commentId) not found")
         }
@@ -6103,7 +5955,6 @@ class WordMCPServer {
         }
         let resolved = args["resolved"]?.boolValue ?? true
 
-        // 使用 CommentsCollection.markAsDone 方法
         doc.comments.markAsDone(commentId, done: resolved)
         openDocuments[docId] = doc
 
@@ -6132,11 +5983,9 @@ class WordMCPServer {
         let horizontalRelative = args["horizontal_relative"]?.stringValue ?? "column"
         let allowOverlap = args["allow_overlap"]?.boolValue ?? true
 
-        // 讀取圖片數據
         let url = URL(fileURLWithPath: path)
         let imageData = try Data(contentsOf: url)
 
-        // 建立圖片參照
         let imageId = "rId\(doc.images.count + 10)"
         let imageRef = ImageReference(
             id: imageId,
@@ -6146,18 +5995,15 @@ class WordMCPServer {
         )
         doc.images.append(imageRef)
 
-        // 建立浮動圖片定位
         var anchorPosition = AnchorPosition()
         anchorPosition.horizontalOffset = horizontalPos
         anchorPosition.verticalOffset = verticalPos
         anchorPosition.allowOverlap = allowOverlap
 
-        // 設定水平參照點
         if let hrel = HorizontalRelativeFrom(rawValue: horizontalRelative) {
             anchorPosition.horizontalRelativeFrom = hrel
         }
 
-        // 設定文繞圖類型
         switch wrapTypeStr.lowercased() {
         case "none": anchorPosition.wrapType = .none
         case "square": anchorPosition.wrapType = .square
@@ -6169,7 +6015,6 @@ class WordMCPServer {
         default: anchorPosition.wrapType = .square
         }
 
-        // 建立浮動繪圖
         let drawing = Drawing.anchor(
             width: widthEmu,
             height: heightEmu,
@@ -6178,7 +6023,6 @@ class WordMCPServer {
             name: url.lastPathComponent
         )
 
-        // 插入到段落
         try doc.insertDrawing(drawing, at: paragraphIndex)
         openDocuments[docId] = doc
 
@@ -6225,7 +6069,6 @@ class WordMCPServer {
             throw WordError.missingParameter("false_text")
         }
 
-        // 轉換運算符字串為 enum
         let compOp: IFField.ComparisonOperator
         switch operatorStr {
         case "=", "==": compOp = .equal
@@ -6266,7 +6109,6 @@ class WordMCPServer {
         }
         let format = args["format"]?.stringValue
 
-        // 表達式可以是完整的如 "=SUM(ABOVE)" 或 "SUM(ABOVE)"
         let calcField = CalculationField(
             expression: expression,
             numberFormat: format
@@ -6424,7 +6266,6 @@ class WordMCPServer {
             throw WordError.invalidParameter("type", "Unknown SDT type: \(typeStr). Valid: richText, text, picture, date, dropDownList, comboBox, checkbox")
         }
 
-        // 使用正確的初始化順序
         let sdt = StructuredDocumentTag(
             id: Int.random(in: 100000...999999),
             tag: tag,
@@ -6433,7 +6274,6 @@ class WordMCPServer {
             placeholder: placeholder
         )
 
-        // 使用 ContentControl 包裝
         let contentControl = ContentControl(sdt: sdt, content: contentText)
 
         try doc.insertContentControl(contentControl, at: paragraphIndex)
@@ -6457,7 +6297,6 @@ class WordMCPServer {
         let sectionTitle = args["section_title"]?.stringValue
         let itemsArray = args["items"]?.arrayValue ?? []
 
-        // 解析初始項目
         var items: [RepeatingSectionItem] = []
         for item in itemsArray {
             if let content = item.stringValue {
@@ -6469,12 +6308,10 @@ class WordMCPServer {
             }
         }
 
-        // 如果沒有初始項目，創建一個空的
         if items.isEmpty {
             items.append(RepeatingSectionItem(content: ""))
         }
 
-        // 使用正確的初始化方式
         let repeatingSection = RepeatingSection(
             tag: tag,
             alias: sectionTitle,
@@ -6489,9 +6326,7 @@ class WordMCPServer {
         return "Inserted repeating section '\(tag)' with \(items.count) item(s) at index \(index)"
     }
 
-    // MARK: - P9 新增功能
 
-    // 9.1 insert_text - 在指定位置插入文字
     private func insertText(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6508,13 +6343,11 @@ class WordMCPServer {
 
         let position = args["position"]?.intValue
 
-        // 取得段落並插入文字
         let paragraphs = doc.getParagraphs()
         guard paragraphIndex >= 0 && paragraphIndex < paragraphs.count else {
             throw WordError.invalidIndex(paragraphIndex)
         }
 
-        // 取得現有文字並在指定位置插入
         let currentText = paragraphs[paragraphIndex].getText()
         let insertPosition = position ?? currentText.count
 
@@ -6528,13 +6361,10 @@ class WordMCPServer {
         return "Inserted text at paragraph \(paragraphIndex)\(position.map { ", position \($0)" } ?? " (at end)")"
     }
 
-    // 9.2 get_document_text - get_text 的別名
     private func getDocumentText(args: [String: Value]) async throws -> String {
-        // 直接呼叫 getText，這是一個更直覺的別名
         return try await getText(args: args)
     }
 
-    // 9.3 search_text - 搜尋文字
     private func searchText(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6548,7 +6378,6 @@ class WordMCPServer {
 
         let caseSensitive = args["case_sensitive"]?.boolValue ?? false
 
-        // 搜尋每個段落中的文字
         let paragraphs = doc.getParagraphs()
         var results: [(paragraphIndex: Int, startPosition: Int, text: String)] = []
 
@@ -6577,7 +6406,6 @@ class WordMCPServer {
         return output
     }
 
-    // 9.4 list_hyperlinks - 列出所有超連結
     private func listHyperlinks(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6600,7 +6428,6 @@ class WordMCPServer {
         return output
     }
 
-    // 9.5 list_bookmarks - 列出所有書籤
     private func listBookmarks(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6621,7 +6448,6 @@ class WordMCPServer {
         return output
     }
 
-    // 9.6 list_footnotes - 列出所有腳註
     private func listFootnotes(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6643,7 +6469,6 @@ class WordMCPServer {
         return output
     }
 
-    // 9.7 list_endnotes - 列出所有尾註
     private func listEndnotes(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6665,7 +6490,6 @@ class WordMCPServer {
         return output
     }
 
-    // 9.8 get_revisions - 取得所有修訂記錄
     private func getRevisions(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6681,7 +6505,6 @@ class WordMCPServer {
 
         var output = "Revisions in document (\(revisions.count)):\n"
         for revision in revisions {
-            // revision.type 是 String (rawValue)
             let typeStr = revision.type.uppercased()
             let author = revision.author
             output += "[\(revision.id)] \(typeStr) by \(author) at paragraph \(revision.paragraphIndex)\n"
@@ -6695,7 +6518,6 @@ class WordMCPServer {
         return output
     }
 
-    // 9.9 accept_all_revisions - 接受所有修訂
     private func acceptAllRevisions(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6711,7 +6533,6 @@ class WordMCPServer {
         return "Accepted \(count) revision(s)"
     }
 
-    // 9.10 reject_all_revisions - 拒絕所有修訂
     private func rejectAllRevisions(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6727,7 +6548,6 @@ class WordMCPServer {
         return "Rejected \(count) revision(s)"
     }
 
-    // 9.11 set_document_properties - 設定文件屬性
     private func setDocumentProperties(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6760,7 +6580,6 @@ class WordMCPServer {
         return "Updated document properties"
     }
 
-    // 9.12 get_document_properties - 取得文件屬性
     private func getDocumentProperties(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6789,7 +6608,6 @@ class WordMCPServer {
         return output
     }
 
-    // 9.13 get_paragraph_runs - 取得段落的 runs 及格式
     private func getParagraphRuns(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6813,7 +6631,6 @@ class WordMCPServer {
             output += "  Run [\(runIndex)]:\n"
             output += "    Text: \"\(run.text)\"\n"
 
-            // 格式資訊
             let props = run.properties
             var formatParts: [String] = []
 
@@ -6834,7 +6651,6 @@ class WordMCPServer {
             }
         }
 
-        // 也顯示超連結
         if !para.hyperlinks.isEmpty {
             output += "  Hyperlinks:\n"
             for hyperlink in para.hyperlinks {
@@ -6845,7 +6661,6 @@ class WordMCPServer {
         return output
     }
 
-    // 9.14 get_text_with_formatting - 取得帶格式標記的文字
     private func getTextWithFormatting(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6856,7 +6671,6 @@ class WordMCPServer {
 
         let paragraphs = doc.getParagraphs()
 
-        // 如果指定了段落索引，只處理該段落
         if let paragraphIndex = args["paragraph_index"]?.intValue {
             guard paragraphIndex >= 0 && paragraphIndex < paragraphs.count else {
                 throw WordError.invalidIndex(paragraphIndex)
@@ -6864,7 +6678,6 @@ class WordMCPServer {
             return formatParagraphWithMarkup(paragraphs[paragraphIndex], index: paragraphIndex)
         }
 
-        // 處理所有段落
         var output = ""
         for (index, para) in paragraphs.enumerated() {
             output += formatParagraphWithMarkup(para, index: index) + "\n"
@@ -6873,7 +6686,6 @@ class WordMCPServer {
         return output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    // Helper: 將段落轉換為帶格式標記的文字
     private func formatParagraphWithMarkup(_ para: Paragraph, index: Int) -> String {
         var result = "[\(index)] "
 
@@ -6881,7 +6693,6 @@ class WordMCPServer {
             var text = run.text
             let props = run.properties
 
-            // 加入格式標記
             if props.bold {
                 text = "**\(text)**"
             }
@@ -6892,7 +6703,6 @@ class WordMCPServer {
                 text = "~~\(text)~~"
             }
             if let color = props.color {
-                // 常見顏色轉換為名稱
                 let colorName = colorHexToName(color)
                 text = "{{color:\(colorName)}}\(text){{/color}}"
             }
@@ -6906,7 +6716,6 @@ class WordMCPServer {
             result += text
         }
 
-        // 加入超連結
         for hyperlink in para.hyperlinks {
             result += " [\(hyperlink.text)](\(hyperlink.url ?? "#\(hyperlink.anchor ?? "")"))"
         }
@@ -6914,7 +6723,6 @@ class WordMCPServer {
         return result
     }
 
-    // Helper: 顏色 hex 轉名稱
     private func colorHexToName(_ hex: String) -> String {
         let upperHex = hex.uppercased()
         switch upperHex {
@@ -6933,7 +6741,6 @@ class WordMCPServer {
         }
     }
 
-    // 9.15 search_by_formatting - 搜尋特定格式的文字
     private func searchByFormatting(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -6942,7 +6749,6 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        // 取得搜尋條件
         let searchColor = args["color"]?.stringValue?.uppercased()
         let searchBold = args["bold"]?.boolValue
         let searchItalic = args["italic"]?.boolValue
@@ -6956,35 +6762,30 @@ class WordMCPServer {
                 let props = run.properties
                 var matches = true
 
-                // 檢查顏色
                 if let color = searchColor {
                     if props.color?.uppercased() != color {
                         matches = false
                     }
                 }
 
-                // 檢查粗體
                 if let bold = searchBold {
                     if props.bold != bold {
                         matches = false
                     }
                 }
 
-                // 檢查斜體
                 if let italic = searchItalic {
                     if props.italic != italic {
                         matches = false
                     }
                 }
 
-                // 檢查螢光標記
                 if let highlight = searchHighlight {
                     if props.highlight?.rawValue != highlight {
                         matches = false
                     }
                 }
 
-                // 如果符合且文字不為空，加入結果
                 if matches && !run.text.isEmpty {
                     var formatParts: [String] = []
                     if props.bold { formatParts.append("bold") }
@@ -7015,7 +6816,6 @@ class WordMCPServer {
         return output
     }
 
-    // 9.16 search_text_with_formatting - 搜尋文字並顯示格式
     private func searchTextWithFormatting(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -7043,7 +6843,6 @@ class WordMCPServer {
                 let position = searchText.distance(from: searchText.startIndex, to: range.lowerBound)
                 let matchedText = String(paraText[range])
 
-                // 取得上下文
                 let contextStart = max(0, position - contextChars)
                 let contextEnd = min(paraText.count, position + matchedText.count + contextChars)
                 let startIndex = paraText.index(paraText.startIndex, offsetBy: contextStart)
@@ -7052,12 +6851,10 @@ class WordMCPServer {
                 if contextStart > 0 { context = "..." + context }
                 if contextEnd < paraText.count { context = context + "..." }
 
-                // 找出該位置的格式
                 var formats: [String] = []
                 var currentPos = 0
                 for run in para.runs {
                     let runEnd = currentPos + run.text.count
-                    // 檢查這個 run 是否包含搜尋結果
                     if currentPos <= position && position < runEnd {
                         let props = run.properties
                         if props.bold { formats.append("bold") }
@@ -7098,7 +6895,6 @@ class WordMCPServer {
         return output
     }
 
-    // 9.17 list_all_formatted_text - 列出特定格式的所有文字
     private func listAllFormattedText(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -7166,14 +6962,12 @@ class WordMCPServer {
 
         var output = "Found \(results.count) \(formatType) text segment(s):\n"
         for result in results {
-            // 截斷過長的文字
             let displayText = result.text.count > 60 ? String(result.text.prefix(57)) + "..." : result.text
             output += "[Para \(result.paraIndex)] \"\(displayText)\"\n"
         }
         return output
     }
 
-    // 9.18 get_word_count_by_section - 按區段統計字數
     private func getWordCountBySection(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -7182,7 +6976,6 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        // 解析區段標記
         var sectionMarkers: [String] = []
         if let markersValue = args["section_markers"] {
             if let markersArray = markersValue.arrayValue {
@@ -7190,7 +6983,6 @@ class WordMCPServer {
             }
         }
 
-        // 解析排除區段
         var excludeSections: Set<String> = []
         if let excludeValue = args["exclude_sections"] {
             if let excludeArray = excludeValue.arrayValue {
@@ -7200,7 +6992,6 @@ class WordMCPServer {
 
         let paragraphs = doc.getParagraphs()
 
-        // 如果沒有指定區段標記，直接計算總字數
         if sectionMarkers.isEmpty {
             var totalWords = 0
             var totalChars = 0
@@ -7217,12 +7008,10 @@ class WordMCPServer {
             """
         }
 
-        // 找出每個區段的起始段落
         var sectionStarts: [(name: String, startIndex: Int)] = []
         for (index, para) in paragraphs.enumerated() {
             let paraText = para.getText().trimmingCharacters(in: .whitespacesAndNewlines)
             for marker in sectionMarkers {
-                // 檢查段落是否以標記開頭（支援各種格式如 "1. Introduction", "Introduction:", "INTRODUCTION" 等）
                 let lowerParaText = paraText.lowercased()
                 let lowerMarker = marker.lowercased()
                 if lowerParaText == lowerMarker ||
@@ -7236,7 +7025,6 @@ class WordMCPServer {
             }
         }
 
-        // 如果沒有找到任何區段，返回總字數
         if sectionStarts.isEmpty {
             var totalWords = 0
             for para in paragraphs {
@@ -7250,12 +7038,10 @@ class WordMCPServer {
             """
         }
 
-        // 計算每個區段的字數
         var sectionCounts: [(name: String, words: Int, excluded: Bool)] = []
         var totalWords = 0
         var excludedWords = 0
 
-        // 處理第一個區段之前的內容
         if sectionStarts[0].startIndex > 0 {
             var preWords = 0
             for i in 0..<sectionStarts[0].startIndex {
@@ -7267,7 +7053,6 @@ class WordMCPServer {
             }
         }
 
-        // 計算各區段
         for (i, section) in sectionStarts.enumerated() {
             let startIndex = section.startIndex
             let endIndex = (i + 1 < sectionStarts.count) ? sectionStarts[i + 1].startIndex : paragraphs.count
@@ -7285,13 +7070,12 @@ class WordMCPServer {
             }
         }
 
-        // 生成輸出
         var output = "Word Count by Section:\n"
         for section in sectionCounts {
             let excludeTag = section.excluded ? " (excluded)" : ""
             output += "  \(section.name): \(formatNumber(section.words)) words\(excludeTag)\n"
         }
-        output += "  ─────────────────────────────\n"
+        output += "  -----------------------------\n"
         if excludedWords > 0 {
             output += "  Main Text: \(formatNumber(totalWords - excludedWords)) words\n"
         }
@@ -7300,16 +7084,13 @@ class WordMCPServer {
         return output
     }
 
-    // Helper: 計算字數（支援中英文混合）
     private func countWords(_ text: String) -> Int {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return 0 }
 
-        // 分離中文和英文
         var englishWords = 0
         var chineseChars = 0
 
-        // 用正規表達式分割
         let englishPattern = try? NSRegularExpression(pattern: "[a-zA-Z]+", options: [])
         let chinesePattern = try? NSRegularExpression(pattern: "[\\u4e00-\\u9fff]", options: [])
 
@@ -7323,11 +7104,9 @@ class WordMCPServer {
             chineseChars = matches.count
         }
 
-        // 中文每個字算一個詞
         return englishWords + chineseChars
     }
 
-    // Helper: 格式化數字（加入千分位）
     private func formatNumber(_ number: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -7455,7 +7234,6 @@ class WordMCPServer {
                 }
                 idx += 1
             } else if aIdx != nil && bIdx == nil {
-                // Check if next is ADDED and they are similar → MODIFIED
                 if idx + 1 < aligned.count,
                    aligned[idx + 1].aIdx == nil,
                    let bi = aligned[idx + 1].bIdx,
@@ -7480,7 +7258,6 @@ class WordMCPServer {
                     idx += 1
                 }
             } else {
-                // ADDED - check if next is DELETED and they are similar → MODIFIED
                 if idx + 1 < aligned.count,
                    aligned[idx + 1].bIdx == nil,
                    let ai = aligned[idx + 1].aIdx,
@@ -7528,8 +7305,8 @@ class WordMCPServer {
         Compare: \(docIdB) (\(infoB.paragraphs) paragraphs, \(formatNumber(infoB.words)) words)
 
         --- Statistics ---
-        Paragraph count: \(infoA.paragraphs) → \(infoB.paragraphs) (\(infoB.paragraphs >= infoA.paragraphs ? "+" : "")\(infoB.paragraphs - infoA.paragraphs))
-        Word count: \(formatNumber(infoA.words)) → \(formatNumber(infoB.words)) (\(infoB.words >= infoA.words ? "+" : "")\(formatNumber(infoB.words - infoA.words)))
+        Paragraph count: \(infoA.paragraphs) -> \(infoB.paragraphs) (\(infoB.paragraphs >= infoA.paragraphs ? "+" : "")\(infoB.paragraphs - infoA.paragraphs))
+        Word count: \(formatNumber(infoA.words)) -> \(formatNumber(infoB.words)) (\(infoB.words >= infoA.words ? "+" : "")\(formatNumber(infoB.words - infoA.words)))
 
         --- Heading Outline: Base (\(docIdA)) ---
 
@@ -7644,7 +7421,7 @@ class WordMCPServer {
             let style = entry.style ?? "Normal"
             switch entry.type {
             case .modified:
-                output += "\n[MODIFIED] A[\(entry.indexA!)] → B[\(entry.indexB!)] (\(style))"
+                output += "\n[MODIFIED] A[\(entry.indexA!)] -> B[\(entry.indexB!)] (\(style))"
                 output += "\n  - \(truncateText(entry.textA ?? "", maxLength: 200))"
                 output += "\n  + \(truncateText(entry.textB ?? "", maxLength: 200))"
             case .deleted:
@@ -7654,7 +7431,7 @@ class WordMCPServer {
                 output += "\n[ADDED] B[\(entry.indexB!)] (\(style))"
                 output += "\n  \(truncateText(entry.textB ?? "", maxLength: 200))"
             case .formatOnly:
-                output += "\n[FORMAT_ONLY] A[\(entry.indexA!)] → B[\(entry.indexB!)] (\(style))"
+                output += "\n[FORMAT_ONLY] A[\(entry.indexA!)] -> B[\(entry.indexB!)] (\(style))"
                 output += "\n  Text: \(truncateText(entry.textA ?? "", maxLength: 120))"
                 // Show formatting diff
                 let fmtA = entry.formattedA ?? ""
@@ -7735,9 +7512,7 @@ class WordMCPServer {
         )
     }
 
-    // MARK: - Phase 1: 進階排版功能
 
-    /// 設定多欄排版
     private func setColumns(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -7750,16 +7525,12 @@ class WordMCPServer {
         }
 
         let numCols = min(max(columns, 1), 4)
-        let space = args["space"]?.intValue ?? 720  // 預設 0.5 inch
-        let _ = args["equal_width"]?.boolValue ?? true  // equalWidth - 保留以備將來擴展
+        let space = args["space"]?.intValue ?? 720
+        let _ = args["equal_width"]?.boolValue ?? true
         let separator = args["separator"]?.boolValue ?? false
 
-        // 更新文件的 sectionProperties
         doc.sectionProperties.columns = numCols
 
-        // 由於 OOXMLSwift 的 SectionProperties 只有 columns 屬性
-        // 我們需要透過自訂 XML 來設定更多細節
-        // 這裡先更新基本的 columns 數量
         openDocuments[docId] = doc
 
         var result = "Set document to \(numCols) column(s)"
@@ -7773,7 +7544,6 @@ class WordMCPServer {
         return result
     }
 
-    /// 插入分欄符號
     private func insertColumnBreak(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -7790,23 +7560,18 @@ class WordMCPServer {
             throw WordError.invalidIndex(paragraphIndex)
         }
 
-        // 在指定段落後插入一個包含分欄符的段落
         var columnBreakPara = Paragraph()
         var columnBreakRun = Run(text: "")
-        // 分欄符在 OOXML 中是 <w:br w:type="column"/>
-        // Run 本身不直接支援，我們透過標記來處理
-        columnBreakRun.text = "\u{000C}"  // Form feed 作為標記
+        columnBreakRun.text = "\u{000C}"
         columnBreakPara.runs = [columnBreakRun]
         columnBreakPara.properties.pageBreakBefore = false
 
-        // 插入到指定段落之後
         doc.insertParagraph(columnBreakPara, at: paragraphIndex + 1)
         openDocuments[docId] = doc
 
         return "Inserted column break after paragraph \(paragraphIndex)"
     }
 
-    /// 設定行號
     private func setLineNumbers(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -7821,13 +7586,9 @@ class WordMCPServer {
         let start = args["start"]?.intValue ?? 1
         let countBy = args["count_by"]?.intValue ?? 1
         let restart = args["restart"]?.stringValue ?? "continuous"
-        let distance = args["distance"]?.intValue ?? 360  // 預設 0.25 inch
+        let distance = args["distance"]?.intValue ?? 360
 
-        // 行號需要在 sectPr 中設定 <w:lnNumType>
-        // 目前 OOXMLSwift 的 SectionProperties 沒有直接支援
-        // 這需要在 DocxWriter 中處理
 
-        // 暫時只回傳設定訊息，實際需要擴展 ooxml-swift
         if enable {
             return "Line numbers enabled (start: \(start), count by: \(countBy), restart: \(restart), distance: \(distance) twips)"
         } else {
@@ -7835,7 +7596,6 @@ class WordMCPServer {
         }
     }
 
-    /// 設定頁面邊框
     private func setPageBorders(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -7855,14 +7615,11 @@ class WordMCPServer {
         let showLeft = args["left"]?.boolValue ?? true
         let showRight = args["right"]?.boolValue ?? true
 
-        // 驗證樣式
         let validStyles = ["single", "double", "dotted", "dashed", "thick", "none"]
         guard validStyles.contains(style) else {
             return "Error: Invalid border style. Valid options: \(validStyles.joined(separator: ", "))"
         }
 
-        // 頁面邊框需要在 sectPr 中設定 <w:pgBorders>
-        // 目前 OOXMLSwift 的 SectionProperties 沒有直接支援
 
         var borders: [String] = []
         if showTop { borders.append("top") }
@@ -7877,7 +7634,6 @@ class WordMCPServer {
         return "Page borders set: style=\(style), color=#\(color), size=\(size), offset from \(offsetFrom), borders: \(borders.joined(separator: ", "))"
     }
 
-    /// 插入特殊符號
     private func insertSymbol(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -7895,14 +7651,12 @@ class WordMCPServer {
         let font = args["font"]?.stringValue
         let position = args["position"]?.stringValue ?? "end"
 
-        // 將十六進位字元碼轉換為字元
         guard let codePoint = UInt32(charCode, radix: 16),
               let scalar = Unicode.Scalar(codePoint) else {
             return "Error: Invalid character code '\(charCode)'. Use hexadecimal format (e.g., F020)."
         }
         let symbolChar = String(Character(scalar))
 
-        // 取得段落索引
         let paragraphIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
             if case .paragraph = child { return i }
             return nil
@@ -7937,7 +7691,6 @@ class WordMCPServer {
         return result
     }
 
-    /// 設定文字方向
     private func setTextDirection(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -7956,8 +7709,6 @@ class WordMCPServer {
 
         let paragraphIndex = args["paragraph_index"]?.intValue
 
-        // 文字方向需要在段落或節屬性中設定 <w:textDirection>
-        // 目前 OOXMLSwift 沒有直接支援
 
         if let pIndex = paragraphIndex {
             return "Text direction set to '\(direction)' for paragraph \(pIndex)"
@@ -7966,7 +7717,6 @@ class WordMCPServer {
         }
     }
 
-    /// 插入首字放大（Drop Cap）
     private func insertDropCap(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -7988,7 +7738,6 @@ class WordMCPServer {
             return "Error: Invalid drop cap type. Valid options: drop, margin, none"
         }
 
-        // 取得段落
         let paragraphIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
             if case .paragraph = child { return i }
             return nil
@@ -8000,18 +7749,13 @@ class WordMCPServer {
 
         let actualIndex = paragraphIndices[paragraphIndex]
         if case .paragraph(let para) = doc.body.children[actualIndex] {
-            // Drop cap 需要特殊的 framePr 設定
-            // 在 OOXML 中，首字放大是透過 <w:framePr> 實現
-            // 目前 OOXMLSwift 沒有直接支援
 
             if dropCapType == "none" {
-                // 移除 drop cap（清除 framePr）
                 doc.body.children[actualIndex] = .paragraph(para)
                 openDocuments[docId] = doc
                 return "Drop cap removed from paragraph \(paragraphIndex)"
             }
 
-            // 暫時只更新文件
             doc.body.children[actualIndex] = .paragraph(para)
         }
 
@@ -8026,7 +7770,6 @@ class WordMCPServer {
         return result
     }
 
-    /// 插入水平線
     private func insertHorizontalLine(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8047,7 +7790,6 @@ class WordMCPServer {
             return "Error: Invalid line style. Valid options: \(validStyles.joined(separator: ", "))"
         }
 
-        // 取得段落索引
         let paragraphIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
             if case .paragraph = child { return i }
             return nil
@@ -8059,7 +7801,6 @@ class WordMCPServer {
 
         let actualIndex = paragraphIndices[paragraphIndex]
         if case .paragraph(var para) = doc.body.children[actualIndex] {
-            // 使用段落底部邊框作為水平線
             let borderType: ParagraphBorderType
             switch style {
             case "double": borderType = .double
@@ -8079,7 +7820,6 @@ class WordMCPServer {
         return "Horizontal line added below paragraph \(paragraphIndex) (style: \(style), color: #\(color), size: \(size))"
     }
 
-    /// 設定避頭尾控制
     private func setWidowOrphan(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8091,11 +7831,8 @@ class WordMCPServer {
         let enable = args["enable"]?.boolValue ?? true
         let paragraphIndex = args["paragraph_index"]?.intValue
 
-        // 避頭尾在 OOXML 中是 <w:widowControl/>
-        // 這通常在段落或文件設定中
 
         if let pIndex = paragraphIndex {
-            // 套用到指定段落
             let paragraphIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
                 if case .paragraph = child { return i }
                 return nil
@@ -8107,7 +7844,6 @@ class WordMCPServer {
 
             let actualIndex = paragraphIndices[pIndex]
             if case .paragraph(var para) = doc.body.children[actualIndex] {
-                // keepLines 是最接近的屬性（段落不分頁）
                 para.properties.keepLines = enable
                 doc.body.children[actualIndex] = .paragraph(para)
             }
@@ -8115,7 +7851,6 @@ class WordMCPServer {
             openDocuments[docId] = doc
             return "Widow/orphan control \(enable ? "enabled" : "disabled") for paragraph \(pIndex)"
         } else {
-            // 套用到全文件所有段落
             let paragraphIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
                 if case .paragraph = child { return i }
                 return nil
@@ -8133,7 +7868,6 @@ class WordMCPServer {
         }
     }
 
-    /// 設定與下段同頁
     private func setKeepWithNext(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8147,7 +7881,6 @@ class WordMCPServer {
 
         let enable = args["enable"]?.boolValue ?? true
 
-        // 取得段落索引
         let paragraphIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
             if case .paragraph = child { return i }
             return nil
@@ -8168,9 +7901,7 @@ class WordMCPServer {
         return "Keep with next \(enable ? "enabled" : "disabled") for paragraph \(paragraphIndex)"
     }
 
-    // MARK: - Phase 2: 浮水印與文件保護
 
-    /// 插入文字浮水印
     private func insertWatermark(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8188,20 +7919,16 @@ class WordMCPServer {
         let semitransparent = args["semitransparent"]?.boolValue ?? true
         let rotation = args["rotation"]?.intValue ?? -45
 
-        // 浮水印需要在 header 中加入 VML 或 DrawingML
-        // 目前 OOXMLSwift 沒有直接支援浮水印
-        // 這裡先回傳設定訊息
 
         var result = "Watermark inserted: \"\(text)\""
         result += " (font: \(font), color: #\(color), size: \(size)pt"
         if semitransparent {
             result += ", semitransparent"
         }
-        result += ", rotation: \(rotation)°)"
+        result += ", rotation: \(rotation) degrees)"
         return result
     }
 
-    /// 插入圖片浮水印
     private func insertImageWatermark(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8216,7 +7943,6 @@ class WordMCPServer {
         let scale = args["scale"]?.intValue ?? 100
         let washout = args["washout"]?.boolValue ?? true
 
-        // 檢查檔案是否存在
         guard FileManager.default.fileExists(atPath: imagePath) else {
             return "Error: Image file not found at '\(imagePath)'"
         }
@@ -8230,7 +7956,6 @@ class WordMCPServer {
         return result
     }
 
-    /// 移除浮水印
     private func removeWatermark(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8239,11 +7964,9 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        // 浮水印移除需要清除 header 中的相關元素
         return "Watermark removed from document"
     }
 
-    /// 設定文件保護
     private func protectDocument(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8262,7 +7985,6 @@ class WordMCPServer {
 
         let hasPassword = args["password"]?.stringValue != nil
 
-        // 文件保護需要在 settings.xml 中加入 <w:documentProtection>
         var result = "Document protection enabled: \(protectionType)"
         if hasPassword {
             result += " (password protected)"
@@ -8270,7 +7992,6 @@ class WordMCPServer {
         return result
     }
 
-    /// 移除文件保護
     private func unprotectDocument(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8279,12 +8000,11 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        let _ = args["password"]?.stringValue  // 保留以備驗證
+        let _ = args["password"]?.stringValue
 
         return "Document protection removed"
     }
 
-    /// 設定文件開啟密碼
     private func setDocumentPassword(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8296,12 +8016,9 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        // 文件加密需要在儲存時處理
-        // OOXML 使用 OLE Compound Document 加密
         return "Document password set (password length: \(password.count) characters)"
     }
 
-    /// 移除文件開啟密碼
     private func removeDocumentPassword(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8316,7 +8033,6 @@ class WordMCPServer {
         return "Document password removed"
     }
 
-    /// 限制編輯區域
     private func restrictEditingRegion(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8333,7 +8049,6 @@ class WordMCPServer {
 
         let editor = args["editor"]?.stringValue
 
-        // 驗證段落範圍
         let paragraphs = doc.getParagraphs()
         guard startParagraph >= 0 && startParagraph < paragraphs.count else {
             throw WordError.invalidIndex(startParagraph)
@@ -8342,7 +8057,6 @@ class WordMCPServer {
             throw WordError.invalidIndex(endParagraph)
         }
 
-        // 編輯限制需要在段落中加入 <w:permStart> 和 <w:permEnd>
         var result = "Editable region set: paragraphs \(startParagraph) to \(endParagraph)"
         if let editorName = editor {
             result += " (editor: \(editorName))"
@@ -8350,9 +8064,7 @@ class WordMCPServer {
         return result
     }
 
-    // MARK: - Phase 3: 學術功能
 
-    /// 插入標號
     private func insertCaption(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8376,8 +8088,6 @@ class WordMCPServer {
             return "Error: Invalid label. Valid options: \(validLabels.joined(separator: ", "))"
         }
 
-        // 建立標號段落
-        // 使用 SEQ field: { SEQ Figure \* ARABIC }
         let seqField = "{ SEQ \(label) \\* ARABIC }"
         var captionContent = "\(label) "
         if includeChapterNumber {
@@ -8403,7 +8113,6 @@ class WordMCPServer {
         return "Caption inserted: \(label) \(position) paragraph \(paragraphIndex)"
     }
 
-    /// 插入交互參照
     private func insertCrossReference(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8429,7 +8138,6 @@ class WordMCPServer {
             return "Error: Invalid reference type. Valid options: \(validTypes.joined(separator: ", "))"
         }
 
-        // 交互參照使用 REF field
         var result = "Cross-reference inserted at paragraph \(paragraphIndex)"
         result += " (type: \(referenceType), target: \(referenceTarget), format: \(format)"
         if includeHyperlink {
@@ -8439,7 +8147,6 @@ class WordMCPServer {
         return result
     }
 
-    /// 插入圖表目錄
     private func insertTableOfFigures(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8463,8 +8170,6 @@ class WordMCPServer {
             return "Error: Invalid caption label. Valid options: \(validLabels.joined(separator: ", "))"
         }
 
-        // 建立圖表目錄段落
-        // 使用 TOC field with \c switch for caption label
         var tocPara = Paragraph(text: "{ TOC \\c \"\(captionLabel)\" }")
         tocPara.properties.style = "TOCHeading"
 
@@ -8485,7 +8190,6 @@ class WordMCPServer {
         return result
     }
 
-    /// 標記索引項目
     private func insertIndexEntry(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8510,7 +8214,6 @@ class WordMCPServer {
             throw WordError.invalidIndex(paragraphIndex)
         }
 
-        // 索引項目使用 XE field
         // { XE "main entry:sub entry" \b \i \t "see also" }
         var result = "Index entry marked: \"\(mainEntry)\""
         if let sub = subEntry {
@@ -8529,7 +8232,6 @@ class WordMCPServer {
         return result
     }
 
-    /// 插入索引
     private func insertIndex(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8551,8 +8253,6 @@ class WordMCPServer {
             throw WordError.invalidIndex(paragraphIndex)
         }
 
-        // 建立索引段落
-        // 使用 INDEX field
         var indexPara = Paragraph(text: "{ INDEX \\c \"\(columns)\" }")
         indexPara.properties.style = "Index"
 
@@ -8572,9 +8272,7 @@ class WordMCPServer {
         return result
     }
 
-    // MARK: - Phase 4: 其他重要功能
 
-    /// 設定校訂語言
     private func setLanguage(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8589,9 +8287,6 @@ class WordMCPServer {
         let paragraphIndex = args["paragraph_index"]?.intValue
         let noProofing = args["no_proofing"]?.boolValue ?? false
 
-        // 語言設定需要在 RunProperties 中加入 <w:lang> 元素
-        // 目前 OOXMLSwift 的 RunProperties 沒有支援 language 屬性
-        // 需要擴展 ooxml-swift 來完整支援此功能
 
         if let pIndex = paragraphIndex {
             var result = "Language set to '\(language)' for paragraph \(pIndex)"
@@ -8608,7 +8303,6 @@ class WordMCPServer {
         }
     }
 
-    /// 設定段落不分頁
     private func setKeepLines(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8642,7 +8336,6 @@ class WordMCPServer {
         return "Keep lines together \(enable ? "enabled" : "disabled") for paragraph \(paragraphIndex)"
     }
 
-    /// 設定定位點
     private func insertTabStop(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8670,11 +8363,9 @@ class WordMCPServer {
             return "Error: Invalid alignment. Valid options: \(validAlignments.joined(separator: ", "))"
         }
 
-        // 定位點需要在段落屬性中設定 <w:tabs>
         return "Tab stop added at position \(position) twips (alignment: \(alignment), leader: \(leader)) for paragraph \(paragraphIndex)"
     }
 
-    /// 清除定位點
     private func clearTabStops(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8694,7 +8385,6 @@ class WordMCPServer {
         return "Tab stops cleared for paragraph \(paragraphIndex)"
     }
 
-    /// 設定段落前分頁
     private func setPageBreakBefore(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8728,7 +8418,6 @@ class WordMCPServer {
         return "Page break before \(enable ? "enabled" : "disabled") for paragraph \(paragraphIndex)"
     }
 
-    /// 設定大綱層級
     private func setOutlineLevel(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8752,12 +8441,10 @@ class WordMCPServer {
             throw WordError.invalidIndex(paragraphIndex)
         }
 
-        // 大綱層級需要在段落屬性中設定 <w:outlineLvl>
         let levelDesc = level == 0 ? "body text" : "level \(level)"
         return "Outline level set to \(levelDesc) for paragraph \(paragraphIndex)"
     }
 
-    /// 插入連續分節符
     private func insertContinuousSectionBreak(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8789,7 +8476,6 @@ class WordMCPServer {
         return "Continuous section break inserted after paragraph \(paragraphIndex)"
     }
 
-    /// 取得節屬性
     private func getSectionProperties(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8818,7 +8504,6 @@ class WordMCPServer {
         return result
     }
 
-    /// 新增表格列
     private func addRowToTable(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8842,7 +8527,6 @@ class WordMCPServer {
         let table = tables[tableIndex]
         let colCount = table.rows.first?.cells.count ?? 0
 
-        // 建立新列
         var cells: [TableCell] = []
         for i in 0..<colCount {
             let text = i < data.count ? data[i] : ""
@@ -8850,7 +8534,6 @@ class WordMCPServer {
         }
         let newRow = TableRow(cells: cells)
 
-        // 找到表格在 body.children 中的位置
         let tableIndices = doc.body.children.enumerated().compactMap { (i, child) -> Int? in
             if case .table = child { return i }
             return nil
@@ -8882,7 +8565,6 @@ class WordMCPServer {
         return "Row added to table \(tableIndex) at position '\(position)'"
     }
 
-    /// 新增表格欄
     private func addColumnToTable(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8934,7 +8616,6 @@ class WordMCPServer {
         return "Column added to table \(tableIndex) at position '\(position)'"
     }
 
-    /// 刪除表格列
     private func deleteRowFromTable(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -8973,7 +8654,6 @@ class WordMCPServer {
         return "Row \(rowIndex) deleted from table \(tableIndex)"
     }
 
-    /// 刪除表格欄
     private func deleteColumnFromTable(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -9013,7 +8693,6 @@ class WordMCPServer {
         return "Column \(colIndex) deleted from table \(tableIndex)"
     }
 
-    /// 設定儲存格寬度
     private func setCellWidth(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -9049,11 +8728,9 @@ class WordMCPServer {
             throw WordError.invalidIndex(col)
         }
 
-        // 儲存格寬度需要在 <w:tcPr> 中設定 <w:tcW>
         return "Cell width set to \(width) \(widthType) for table \(tableIndex), row \(row), col \(col)"
     }
 
-    /// 設定列高
     private func setRowHeight(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -9083,11 +8760,9 @@ class WordMCPServer {
             throw WordError.invalidIndex(rowIndex)
         }
 
-        // 列高需要在 <w:trPr> 中設定 <w:trHeight>
         return "Row height set to \(height) twips (\(heightRule)) for table \(tableIndex), row \(rowIndex)"
     }
 
-    /// 設定表格對齊
     private func setTableAlignment(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -9112,11 +8787,9 @@ class WordMCPServer {
             throw WordError.invalidIndex(tableIndex)
         }
 
-        // 表格對齊需要在 <w:tblPr> 中設定 <w:jc>
         return "Table \(tableIndex) alignment set to '\(alignment)'"
     }
 
-    /// 設定儲存格垂直對齊
     private func setCellVerticalAlignment(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -9155,11 +8828,9 @@ class WordMCPServer {
             throw WordError.invalidIndex(col)
         }
 
-        // 儲存格垂直對齊需要在 <w:tcPr> 中設定 <w:vAlign>
         return "Cell vertical alignment set to '\(alignment)' for table \(tableIndex), row \(row), col \(col)"
     }
 
-    /// 設定標題列
     private func setHeaderRow(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -9183,7 +8854,6 @@ class WordMCPServer {
             return "Error: Row count must be between 1 and \(table.rows.count)"
         }
 
-        // 標題列需要在 <w:trPr> 中設定 <w:tblHeader/>
         return "Header row(s) set for table \(tableIndex): first \(rowCount) row(s) will repeat across pages"
     }
 }

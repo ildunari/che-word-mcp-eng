@@ -71,4 +71,4 @@ gh release upload v1.x.0 mcpb/che-word-mcp.mcpb
 
 - **ooxml-swift**: https://github.com/kiki830621/ooxml-swift (core OOXML library)
 - **macdoc**: /Users/che/Developer/macdoc (Word->Markdown CLI, delegated target for `export_markdown`)
-- **che-claude-plugins**: plugin definitions including this project
+- **che-Codex-plugins**: plugin definitions including this project

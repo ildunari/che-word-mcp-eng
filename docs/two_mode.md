@@ -1,43 +1,43 @@
 # Two Modes: Direct Mode vs Memory Mode
 
-che-word-mcp 提供兩種操作模式。每個 tool 只屬於一種模式，不混用（見 [消歧義原則](../../docs/DISAMBIGUATION.md)）。
+che-word-mcp provides two operation modes. Each tool belongs to one mode only and modes do not mix in a single call chain (see [Disambiguation Principles](../../docs/DISAMBIGUATION.md)).
 
-## Direct Mode（`source_path`）
+## Direct Mode (`source_path`)
 
-直接傳入 `.docx` 檔案路徑，一次呼叫完成。不需要先 `open_document`。
+Pass a `.docx` path directly and complete the operation in one call. You do not need to call `open_document` first.
 
 ```
 get_text(source_path="/path/to/file.docx")
 export_markdown(source_path="/path/to/file.docx", path="/path/to/output.md")
 ```
 
-### 特性
+### Characteristics
 
-- **單次呼叫**：parse → 處理 → 回傳/寫檔
-- **無狀態**：不佔用伺服器記憶體，處理完即釋放
-- **唯讀**：不修改原始文件
+- **Single call**: parse -> process -> return/write output
+- **Stateless**: does not keep server memory after completion
+- **Read-only**: does not modify the source document
 
-### Tools 與 Fidelity Tier
+### Tools and Fidelity Tier
 
-| Tool | Tier | 輸出 | 必要參數 |
-|------|------|------|----------|
-| `get_text` | 1 | 純文字（回傳內容） | `source_path` |
-| `get_document_text` | 1 | 純文字（get_text 別名） | `source_path` |
-| `export_markdown` | 2 | Markdown + 圖片（寫檔） | `source_path`, `path` |
-| `compare_documents` | — | 差異比較 | `path_a`, `path_b` |
+| Tool | Tier | Output | Required Parameters |
+|------|------|--------|---------------------|
+| `get_text` | 1 | Plain text (returned content) | `source_path` |
+| `get_document_text` | 1 | Plain text (`get_text` alias) | `source_path` |
+| `export_markdown` | 2 | Markdown + images (writes files) | `source_path`, `path` |
+| `compare_documents` | - | Difference comparison | `path_a`, `path_b` |
 
-### 效能
+### Performance
 
 ```
-get_text:        source_path → DocxReader.read(~0.64s) → getText(<1ms) → 回傳文字
-export_markdown: source_path → DocxReader.read(~0.64s) → WordConverter(<1ms) → 寫 .md + figures/
+get_text:        source_path -> DocxReader.read(~0.64s) -> getText(<1ms) -> return text
+export_markdown: source_path -> DocxReader.read(~0.64s) -> WordConverter(<1ms) -> write .md + figures/
 ```
 
 ---
 
-## Memory Mode（`doc_id`）
+## Memory Mode (`doc_id`)
 
-先用 `open_document` 將文件載入記憶體，再透過 `doc_id` 執行多次操作。
+Load a document into memory first with `open_document`, then perform multiple operations through `doc_id`.
 
 ```
 open_document(path="/path/to/file.docx", doc_id="report")
@@ -48,42 +48,42 @@ save_document(doc_id="report", path="/path/to/output.docx")
 close_document(doc_id="report")
 ```
 
-### 特性
+### Characteristics
 
-- **有狀態**：文件常駐記憶體，後續操作免重複 parse
-- **多次操作**：開啟一次，可執行任意多次讀寫操作
-- **適合編輯**：插入、刪除、格式化、表格操作等
+- **Stateful**: keeps the document in memory and avoids repeated parsing
+- **Multi-step operations**: open once, then run many read/write operations
+- **Best for editing**: insert/delete/format/table operations
 
 ### Tools
 
-所有需要 `doc_id` 的 tools：`get_paragraphs`, `insert_paragraph`, `format_text`, `insert_table`, `save_document` 等。
+All tools requiring `doc_id`, such as `get_paragraphs`, `insert_paragraph`, `format_text`, `insert_table`, and `save_document`.
 
-### 效能
+### Performance
 
 ```
-open_document    → DocxReader.read()   → 存入記憶體（~0.64s，只做一次）
-get_paragraphs   → 讀取記憶體         → <1ms
-insert_paragraph → 修改記憶體         → <1ms
-save_document    → DocxWriter.write()  → ~20ms
+open_document    -> DocxReader.read()   -> keep in memory (~0.64s, one-time)
+get_paragraphs   -> read from memory    -> <1ms
+insert_paragraph -> mutate in memory    -> <1ms
+save_document    -> DocxWriter.write()  -> ~20ms
 ```
 
 ---
 
-## 選擇指引
+## Selection Guide
 
 ```
-需要修改文件？
-  ├─ 是 → Memory Mode（open → edit → save）
-  └─ 否 → 需要什麼輸出？
-            ├─ 純文字 → get_text(source_path=...)           Tier 1
-            ├─ Markdown + 圖片 → export_markdown(...)       Tier 2
-            └─ 比較差異 → compare_documents(...)
+Need to modify the document?
+  |- Yes -> Memory Mode (open -> edit -> save)
+  `- No  -> What output do you need?
+            |- Plain text -> get_text(source_path=...)           Tier 1
+            |- Markdown + images -> export_markdown(...)         Tier 2
+            `- Diff comparison -> compare_documents(...)
 ```
 
-| 需求 | 模式 | Tool | 原因 |
-|------|------|------|------|
-| AI 快速閱讀 | Direct | `get_text` | 一次呼叫，純文字 |
-| AI 結構化閱讀 | Direct | `export_markdown` | Markdown 格式 + 圖片 |
-| 修改文件 | Memory | `open` → edit → `save` | 需要多步驟 |
-| 建立新文件 | Memory | `create` → 組裝 → `save` | 需要多步驟 |
-| 比較兩份文件 | Direct | `compare_documents` | 直接吃檔案 |
+| Need | Mode | Tool | Why |
+|------|------|------|-----|
+| Fast AI reading | Direct | `get_text` | One call, plain text |
+| Structured AI reading | Direct | `export_markdown` | Markdown format + images |
+| Modify documents | Memory | `open` -> edit -> `save` | Multi-step editing workflow |
+| Create new documents | Memory | `create` -> compose -> `save` | Multi-step creation workflow |
+| Compare two documents | Direct | `compare_documents` | Direct file-to-file comparison |

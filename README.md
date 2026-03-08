@@ -2,7 +2,7 @@
 
 A Swift-native MCP (Model Context Protocol) server for Microsoft Word document (.docx) manipulation. This is the **first Swift OOXML library** that directly manipulates Office Open XML without any third-party Word dependencies.
 
-[中文說明](README_zh-TW.md)
+Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this English documentation.
 
 ## Features
 
@@ -38,14 +38,14 @@ A Swift-native MCP (Model Context Protocol) server for Microsoft Word document (
 
 ### Option 1: Download from Release (Recommended)
 
-Download the latest release from [GitHub Releases](https://github.com/kiki830621/che-word-mcp/releases):
+Download the latest release from [GitHub Releases](https://github.com/ildunari/che-word-mcp-eng/releases):
 
 - **CheWordMCP** - Universal Binary (arm64 + x86_64)
 - **che-word-mcp.mcpb** - MCPB package
 
 ```bash
 # Download and install
-curl -L https://github.com/kiki830621/che-word-mcp/releases/latest/download/CheWordMCP -o ~/bin/CheWordMCP
+curl -L https://github.com/ildunari/che-word-mcp-eng/releases/latest/download/CheWordMCP -o ~/bin/CheWordMCP
 chmod +x ~/bin/CheWordMCP
 ```
 
@@ -57,8 +57,8 @@ chmod +x ~/bin/CheWordMCP
 - Swift 5.9+
 
 ```bash
-git clone https://github.com/kiki830621/che-word-mcp.git
-cd che-word-mcp
+git clone https://github.com/ildunari/che-word-mcp-eng.git
+cd che-word-mcp-eng
 swift build -c release
 ```
 
@@ -67,7 +67,7 @@ The binary will be located at `.build/release/CheWordMCP`
 ### Add to Claude Code
 
 ```bash
-claude mcp add che-word-mcp /path/to/che-word-mcp/.build/release/CheWordMCP
+claude mcp add che-word-mcp /path/to/che-word-mcp-eng/.build/release/CheWordMCP
 ```
 
 ### Add to Claude Desktop
@@ -78,7 +78,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "che-word-mcp": {
-      "command": "/path/to/che-word-mcp/.build/release/CheWordMCP"
+      "command": "/path/to/che-word-mcp-eng/.build/release/CheWordMCP"
     }
   }
 }
@@ -129,13 +129,13 @@ For Claude Code, a skill provides richer context:
 # Download the skill
 mkdir -p .claude/skills/che-word-mcp
 curl -o .claude/skills/che-word-mcp/SKILL.md \
-  https://raw.githubusercontent.com/kiki830621/che-word-mcp/main/skills/che-word-mcp/SKILL.md
+  https://raw.githubusercontent.com/ildunari/che-word-mcp-eng/main/skills/che-word-mcp/SKILL.md
 ```
 
 Or copy from the repository:
 
 ```bash
-cp -r /path/to/che-word-mcp/skills/che-word-mcp .claude/skills/
+cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 ```
 
 ## Available Tools (83 Total)
