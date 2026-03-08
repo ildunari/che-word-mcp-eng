@@ -9,7 +9,8 @@ mcpb/
 ├── manifest.json    # Package metadata
 ├── server/          # Binary files (Universal Binary)
 │   └── CheWordMCP   # The MCP server executable
-└── README.md        # This file
+├── README.md        # This file
+└── che-word-mcp.mcpb # Built MCPB archive
 ```
 
 ## Building the Package
@@ -24,7 +25,7 @@ lipo -create \
   -output mcpb/server/CheWordMCP
 
 # Create .mcpb package
-cd mcpb && zip -r che-word-mcp.mcpb manifest.json README.md PRIVACY.md server
+cd mcpb && zip -r che-word-mcp.mcpb manifest.json README.md server
 ```
 
 ## Installation

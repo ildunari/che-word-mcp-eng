@@ -168,6 +168,59 @@ final class WordMCPServerTests: XCTestCase {
         XCTAssertFalse(server.isDocumentDirtyForTesting("doc"))
     }
 
+    func testGetDocumentSessionStateReportsDirtyAndFinalizeReadiness() async throws {
+        let url = tempURL("session-state")
+        try writeDocument(text: "State doc", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "text": .string("Dirty edit")
+            ]
+        )
+
+        let stateResult = await server.invokeToolForTesting(
+            name: "get_document_session_state",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let text = resultText(stateResult)
+        XCTAssertEqual(stateResult.isError, nil)
+        XCTAssertTrue(text.contains("Dirty: true"))
+        XCTAssertTrue(text.contains("Track changes enabled: true"))
+        XCTAssertTrue(text.contains("Save without explicit path available: true"))
+        XCTAssertTrue(text.contains("Close without save allowed: false"))
+        XCTAssertTrue(text.contains("Finalize without explicit path available: true"))
+    }
+
+    func testGetDocumentSessionStateForNewDocumentRequiresExplicitSavePath() async {
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "create_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let stateResult = await server.invokeToolForTesting(
+            name: "get_document_session_state",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let text = resultText(stateResult)
+        XCTAssertEqual(stateResult.isError, nil)
+        XCTAssertTrue(text.contains("Original path: (none)"))
+        XCTAssertTrue(text.contains("Save without explicit path available: false"))
+        XCTAssertTrue(text.contains("Finalize without explicit path available: false"))
+    }
+
     func testShutdownFlushPersistsDirtyOpenedDocuments() async throws {
         let url = tempURL("flush")
         try writeDocument(text: "Original", to: url)

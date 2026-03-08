@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.16.0] - 2026-03-08
 
+## [1.17.0] - 2026-03-08
+
+### Added
+- `get_document_session_state` — inspect dirty state, autosave, track-changes status, and whether save/finalize/close are currently safe
+
+### Changed
+- README and bundled skill now nudge agents toward a finalize-first workflow, with session-state inspection available before the final write/close step
+
+### Fixed
+- Added regression tests for session-state reporting on opened and new documents
+
+## [1.16.0] - 2026-03-08
+
 ### Added
 - `finalize_document` — save and close a document in one guarded step, reusing the original opened path when available
 

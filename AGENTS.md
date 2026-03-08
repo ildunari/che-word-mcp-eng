@@ -6,13 +6,12 @@
 che-word-mcp-eng/
 ├── Sources/
 │   └── CheWordMCP/
-│       └── Server.swift          # MCP server entry point (147 tools)
+│       └── Server.swift          # MCP server entry point (148 tools)
 ├── mcpb/                         # MCPB packaging directory
 │   ├── manifest.json             # MCPB manifest
 │   ├── server/
 │   │   └── CheWordMCP            # Built binary (manual copy required)
 │   ├── che-word-mcp.mcpb         # Packaged MCPB archive
-│   ├── PRIVACY.md
 │   └── README.md
 ├── Package.swift                 # Swift package definition
 ├── Package.resolved              # Dependency lock file

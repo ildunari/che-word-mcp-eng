@@ -20,7 +20,7 @@ class WordMCPServer {
     init() async {
         self.server = Server(
             name: "che-word-mcp",
-            version: "1.16.0",
+            version: "1.17.0",
             capabilities: .init(tools: .init())
         )
         self.transport = StdioTransport()
@@ -252,6 +252,20 @@ class WordMCPServer {
                         "path": .object([
                             "type": .string("string"),
                             "description": .string("Optional save path. If omitted, the original opened path is reused when available.")
+                        ])
+                    ]),
+                    "required": .array([.string("doc_id")])
+                ])
+            ),
+            Tool(
+                name: "get_document_session_state",
+                description: "Inspect the current session state for an open document, including save/close readiness and tracking settings.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("file identification code")
                         ])
                     ]),
                     "required": .array([.string("doc_id")])
@@ -3873,6 +3887,8 @@ class WordMCPServer {
             return try await closeDocument(args: args)
         case "finalize_document":
             return try await finalizeDocument(args: args)
+        case "get_document_session_state":
+            return try await getDocumentSessionState(args: args)
         case "list_open_documents":
             return await listOpenDocuments()
         case "get_document_info":
@@ -4282,6 +4298,36 @@ class WordMCPServer {
         removeSession(docId: docId)
 
         return "Finalized document '\(docId)' to: \(path)"
+    }
+
+    private func getDocumentSessionState(args: [String: Value]) async throws -> String {
+        guard let docId = args["doc_id"]?.stringValue else {
+            throw WordError.missingParameter("doc_id")
+        }
+        guard let doc = openDocuments[docId] else {
+            throw WordError.documentNotFound(docId)
+        }
+
+        let dirty = isDirty(docId: docId)
+        let autosaveEnabled = documentAutosave[docId] ?? false
+        let trackChangesEnforced = documentTrackChangesEnforced[docId] ?? true
+        let trackChangesEnabled = doc.isTrackChangesEnabled()
+        let originalPath = documentOriginalPaths[docId]
+        let closeReady = !dirty
+        let saveReady = originalPath != nil
+        let finalizeReady = saveReady
+
+        return """
+        Document Session State (\(docId)):
+        - Dirty: \(dirty)
+        - Autosave enabled: \(autosaveEnabled)
+        - Track changes enabled: \(trackChangesEnabled)
+        - Track changes enforced by server: \(trackChangesEnforced)
+        - Original path: \(originalPath ?? "(none)")
+        - Save without explicit path available: \(saveReady)
+        - Close without save allowed: \(closeReady)
+        - Finalize without explicit path available: \(finalizeReady)
+        """
     }
 
     private func listOpenDocuments() async -> String {

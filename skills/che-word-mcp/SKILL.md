@@ -1,6 +1,6 @@
 # che-word-mcp
 
-A Swift-native MCP server for Microsoft Word (.docx) document manipulation. Provides 147 tools for reading, writing, and modifying Word documents without requiring Microsoft Word installation.
+A Swift-native MCP server for Microsoft Word (.docx) document manipulation. Provides 148 tools for reading, writing, and modifying Word documents without requiring Microsoft Word installation.
 
 ## When to Use
 
@@ -31,6 +31,10 @@ Use `che-word-mcp` when you need to:
 
 3. finalize_document(doc_id: "report")
    → Saves and closes using the original opened path when possible
+
+   Optional check before finalizing:
+   get_document_session_state(doc_id: "report")
+   → Shows dirty state, save/finalize readiness, and tracking status
 ```
 
 ### Creating Documents
@@ -73,6 +77,7 @@ export_markdown(source_path: "/path/to/document.docx", path: "/path/to/output.md
 
 - Do not assume in-memory edits are persisted until `save_document` succeeds.
 - Prefer `finalize_document` when the task is done and you want the file safely written and closed in one step.
+- If the task is complex or the path behavior is unclear, call `get_document_session_state` before the final save/close step.
 - If `close_document` returns an unsaved-changes error, call `save_document` or ask the user whether it should be saved now.
 - Prefer `save_document(doc_id: "...")` after `open_document(...)` so the server can reuse the original path safely.
 - Use `open_document(..., autosave: true)` only when save-after-each-edit is explicitly desired.
