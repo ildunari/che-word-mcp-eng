@@ -41,6 +41,16 @@ extension WordDocument {
         }
 
         try validateEditableParagraph(paragraph, start: start, end: end)
+        if isTrackChangesEnabled() {
+            try trackReplaceTextRange(
+                at: paragraphIndex,
+                start: start,
+                end: end,
+                replacement: replacement,
+                replacementProperties: replacementProperties
+            )
+            return
+        }
         paragraph = try paragraphBySplittingRuns(paragraph, at: [start, end])
 
         let alignedSegments = segments(for: paragraph)
@@ -95,6 +105,15 @@ extension WordDocument {
         }
 
         try validateEditableParagraph(paragraph, start: start, end: end)
+        if isTrackChangesEnabled() {
+            try trackFormatTextRange(
+                at: paragraphIndex,
+                start: start,
+                end: end,
+                format: format
+            )
+            return
+        }
         if start == end {
             return
         }

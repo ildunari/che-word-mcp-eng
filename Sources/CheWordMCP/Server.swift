@@ -20,7 +20,7 @@ class WordMCPServer {
     init() async {
         self.server = Server(
             name: "che-word-mcp",
-            version: "1.18.0",
+            version: "1.19.0",
             capabilities: .init(tools: .init())
         )
         self.transport = StdioTransport()
@@ -120,6 +120,26 @@ class WordMCPServer {
         }
 
         try persistDocumentToDisk(document, docId: docId, path: path)
+    }
+
+    private func nativeRevisionOutput(_ revisions: [(id: Int, type: String, author: String, paragraphIndex: Int, originalText: String?, newText: String?)]) -> String {
+        guard !revisions.isEmpty else {
+            return "No revisions in document"
+        }
+
+        var output = "Revisions in document (\(revisions.count)):\n"
+        for revision in revisions {
+            let typeStr = revision.type.uppercased()
+            let author = revision.author
+            output += "[\(revision.id)] \(typeStr) by \(author) at paragraph \(revision.paragraphIndex)\n"
+            if let original = revision.originalText {
+                output += "    Original: \(original.prefix(30))...\n"
+            }
+            if let newText = revision.newText {
+                output += "    New: \(newText.prefix(30))...\n"
+            }
+        }
+        return output
     }
 
     private func flushDirtyDocumentsOnShutdown() async {
@@ -4646,9 +4666,11 @@ class WordMCPServer {
             doc.appendParagraph(para)
         }
 
+        let insertedIndex = index ?? max(doc.getParagraphs().count - 1, 0)
+
         try await storeDocument(doc, for: docId)
 
-        return "Inserted paragraph at index \(index ?? doc.getParagraphs().count - 1)"
+        return "Inserted paragraph at index \(insertedIndex)"
     }
 
     private func updateParagraph(args: [String: Value]) async throws -> String {
@@ -4706,10 +4728,47 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
+        guard !find.isEmpty else {
+            throw WordError.invalidParameter("find", "find must not be empty")
+        }
+
         enforceTrackChangesIfNeeded(&doc, docId: docId)
 
         let replaceAll = args["all"]?.boolValue ?? true
-        let count = doc.replaceText(find: find, with: replace, all: replaceAll)
+        let paragraphs = doc.getParagraphs()
+        let hasHyperlinks = paragraphs.contains { !$0.hyperlinks.isEmpty }
+
+        if hasHyperlinks {
+            let count = doc.replaceText(find: find, with: replace, all: replaceAll)
+            try await storeDocument(doc, for: docId)
+            return "Replaced \(count) occurrence(s) of '\(find)' with '\(replace)'"
+        }
+
+        var replacements: [(paragraphIndex: Int, start: Int, end: Int)] = []
+
+        for (paragraphIndex, paragraph) in paragraphs.enumerated() {
+            let text = paragraph.getText()
+            var searchStart = text.startIndex
+            while let range = text.range(of: find, range: searchStart..<text.endIndex) {
+                let start = text.distance(from: text.startIndex, to: range.lowerBound)
+                let end = text.distance(from: text.startIndex, to: range.upperBound)
+                replacements.append((paragraphIndex, start, end))
+                if !replaceAll { break }
+                searchStart = range.upperBound
+            }
+            if !replaceAll && !replacements.isEmpty { break }
+        }
+
+        for replacementTarget in replacements.reversed() {
+            try doc.replaceTextRange(
+                at: replacementTarget.paragraphIndex,
+                start: replacementTarget.start,
+                end: replacementTarget.end,
+                replacement: replace,
+                replacementProperties: nil
+            )
+        }
+        let count = replacements.count
         try await storeDocument(doc, for: docId)
 
         return "Replaced \(count) occurrence(s) of '\(find)' with '\(replace)'"
@@ -6112,7 +6171,7 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        let comments = doc.getComments()
+        let comments = doc.comments.comments
         if comments.isEmpty {
             return "No comments in document"
         }
@@ -6122,7 +6181,13 @@ class WordMCPServer {
 
         var result = "Comments (\(comments.count)):\n"
         for comment in comments {
-            result += "- [ID: \(comment.id)] \(comment.author) (\(dateFormatter.string(from: comment.date))): \"\(comment.text)\" (para \(comment.paragraphIndex))\n"
+            if let parentId = comment.parentId {
+                let resolvedState = comment.done ? ", resolved" : ""
+                result += "- [ID: \(comment.id)] \(comment.author) (\(dateFormatter.string(from: comment.date))): \"\(comment.text)\" (reply to \(parentId)\(resolvedState))\n"
+            } else {
+                let resolvedState = comment.done ? ", resolved" : ""
+                result += "- [ID: \(comment.id)] \(comment.author) (\(dateFormatter.string(from: comment.date))): \"\(comment.text)\" (para \(comment.paragraphIndex)\(resolvedState))\n"
+            }
         }
 
         return result
@@ -6172,13 +6237,12 @@ class WordMCPServer {
         let acceptAll = args["all"]?.boolValue ?? false
 
         if acceptAll {
-            doc.acceptAllRevisions()
-            try await storeDocument(doc, for: docId)
-            return "Accepted all revisions"
+            return try await acceptAllRevisions(args: args)
         } else {
             guard let revisionId = args["revision_id"]?.intValue else {
                 throw WordError.missingParameter("revision_id")
             }
+
             try doc.acceptRevision(revisionId: revisionId)
             try await storeDocument(doc, for: docId)
             return "Accepted revision \(revisionId)"
@@ -6198,13 +6262,12 @@ class WordMCPServer {
         let rejectAll = args["all"]?.boolValue ?? false
 
         if rejectAll {
-            doc.rejectAllRevisions()
-            try await storeDocument(doc, for: docId)
-            return "Rejected all revisions"
+            return try await rejectAllRevisions(args: args)
         } else {
             guard let revisionId = args["revision_id"]?.intValue else {
                 throw WordError.missingParameter("revision_id")
             }
+
             try doc.rejectRevision(revisionId: revisionId)
             try await storeDocument(doc, for: docId)
             return "Rejected revision \(revisionId)"
@@ -6581,16 +6644,16 @@ class WordMCPServer {
         }
 
         enforceTrackChangesIfNeeded(&doc, docId: docId)
-        guard let commentId = args["comment_id"]?.intValue else {
-            throw WordError.missingParameter("comment_id")
+        guard let commentId = args["parent_comment_id"]?.intValue ?? args["comment_id"]?.intValue else {
+            throw WordError.missingParameter("parent_comment_id")
         }
-        guard let replyText = args["reply_text"]?.stringValue else {
-            throw WordError.missingParameter("reply_text")
+        guard let replyText = args["text"]?.stringValue ?? args["reply_text"]?.stringValue else {
+            throw WordError.missingParameter("text")
         }
-        let author = args["author"]?.stringValue ?? "User"
+        let author = args["author"]?.stringValue ?? "Author"
 
         guard let reply = doc.comments.addReply(to: commentId, author: author, text: replyText) else {
-            throw WordError.invalidParameter("comment_id", "Comment with ID \(commentId) not found")
+            throw WordError.invalidParameter("parent_comment_id", "Comment with ID \(commentId) not found")
         }
 
         try await storeDocument(doc, for: docId)
@@ -7177,24 +7240,7 @@ class WordMCPServer {
             throw WordError.documentNotFound(docId)
         }
 
-        let revisions = doc.getRevisions()
-        if revisions.isEmpty {
-            return "No revisions in document"
-        }
-
-        var output = "Revisions in document (\(revisions.count)):\n"
-        for revision in revisions {
-            let typeStr = revision.type.uppercased()
-            let author = revision.author
-            output += "[\(revision.id)] \(typeStr) by \(author) at paragraph \(revision.paragraphIndex)\n"
-            if let original = revision.originalText {
-                output += "    Original: \(original.prefix(30))...\n"
-            }
-            if let newText = revision.newText {
-                output += "    New: \(newText.prefix(30))...\n"
-            }
-        }
-        return output
+        return nativeRevisionOutput(doc.getRevisions())
     }
 
     private func acceptAllRevisions(args: [String: Value]) async throws -> String {

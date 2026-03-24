@@ -199,6 +199,71 @@ final class ToolSmokeMatrixTests: XCTestCase {
         XCTAssertTrue(resultText(listResult).contains("Table"))
     }
 
+    func testCommentsAndRevisionsSmokeWorkflow() async throws {
+        let server = await WordMCPServer()
+        let docURL = tempURL("comments-revisions")
+
+        _ = await server.invokeToolForTesting(name: "create_document", arguments: ["doc_id": .string("doc")])
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: ["doc_id": .string("doc"), "text": .string("Draft paragraph")]
+        )
+
+        let commentResult = await server.invokeToolForTesting(
+            name: "insert_comment",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "author": .string("Reviewer"),
+                "text": .string("Please revise")
+            ]
+        )
+        XCTAssertNil(commentResult.isError)
+
+        let replyResult = await server.invokeToolForTesting(
+            name: "reply_to_comment",
+            arguments: [
+                "doc_id": .string("doc"),
+                "parent_comment_id": .int(1),
+                "text": .string("Updated"),
+                "author": .string("Author")
+            ]
+        )
+        XCTAssertNil(replyResult.isError)
+
+        let updateResult = await server.invokeToolForTesting(
+            name: "update_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "index": .int(0),
+                "text": .string("Final paragraph")
+            ]
+        )
+        XCTAssertNil(updateResult.isError)
+
+        let revisionsResult = await server.invokeToolForTesting(
+            name: "get_revisions",
+            arguments: ["doc_id": .string("doc")]
+        )
+        XCTAssertTrue(resultText(revisionsResult).contains("Revisions in document"))
+
+        let acceptAllResult = await server.invokeToolForTesting(
+            name: "accept_all_revisions",
+            arguments: ["doc_id": .string("doc")]
+        )
+        XCTAssertNil(acceptAllResult.isError)
+
+        let saveResult = await server.invokeToolForTesting(
+            name: "save_document",
+            arguments: [
+                "doc_id": .string("doc"),
+                "path": .string(docURL.path)
+            ]
+        )
+        XCTAssertNil(saveResult.isError)
+        XCTAssertTrue(try DocxReader.read(from: docURL).getText().contains("Final paragraph"))
+    }
+
     func testExportAndCompareSmokeWorkflow() async throws {
         let server = await WordMCPServer()
         let urlA = tempURL("compare-a")

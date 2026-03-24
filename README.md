@@ -17,6 +17,7 @@ Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.19.0 | 2026-03-24 | Persist native Word track revisions across save/reopen, surface reply threading in `list_comments`, and add a real stdio smoke harness |
 | v1.18.0 | 2026-03-23 | Add range-aware inline editing, MCP tool metadata hardening, and expanded regression/integration coverage |
 | v1.17.0 | 2026-03-08 | Add `get_document_session_state` and stronger finalize-first workflow guidance |
 | v1.16.0 | 2026-03-08 | Add `finalize_document`, safer document-session lifecycle, and fork-owned release packaging cleanup |
@@ -136,6 +137,13 @@ Precise editing workflow:
 2. `replace_text_range` - Replace text in a character range without flattening unaffected runs
 3. `format_text_range` - Apply formatting to a range instead of reformatting the whole paragraph
 4. `format_text` / `update_paragraph` - Use only when paragraph-wide behavior is actually desired
+
+Comments and tracked revisions:
+1. `list_comments` - Inspect existing comment IDs before replying or resolving
+2. `reply_to_comment` - Reply using `parent_comment_id` + `text` (optional `author`)
+3. `get_revisions` - Inspect native tracked revisions, including changes that survive save/reopen
+4. `accept_revision` / `reject_revision` - Act on one revision ID at a time
+5. `accept_all_revisions` / `reject_all_revisions` - Apply the action to all tracked revisions in the opened file
 ```
 
 ### Claude Code Skill
@@ -154,6 +162,11 @@ Or copy from the repository:
 ```bash
 cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 ```
+
+## Development Notes
+
+- The MCP stdio transport used by this server is newline-delimited JSON-RPC, not `Content-Length` framed messages.
+- For a real binary smoke test, run `./scripts/stdio_smoke.swift` from the repo root after `swift build`.
 
 ## Available Tools (149 Total)
 
@@ -268,7 +281,7 @@ cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 | `insert_bookmark` | Insert bookmark |
 | `delete_bookmark` | Delete bookmark |
 
-### Comments & Revisions (10 tools)
+### Comments & Revisions (13 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -276,12 +289,15 @@ cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 | `update_comment` | Update comment text |
 | `delete_comment` | Delete comment |
 | `list_comments` | List all comments |
-| `reply_to_comment` | Reply to existing comment |
+| `reply_to_comment` | Reply to an existing comment using `parent_comment_id` and `text` |
 | `resolve_comment` | Mark comment as resolved |
 | `enable_track_changes` | Enable track changes |
 | `disable_track_changes` | Disable track changes |
+| `get_revisions` | Get native tracked revision records, including changes that survive save/reopen |
 | `accept_revision` | Accept revision |
 | `reject_revision` | Reject revision |
+| `accept_all_revisions` | Accept all revisions in the file |
+| `reject_all_revisions` | Reject all revisions in the file |
 
 ### Footnotes & Endnotes (4 tools)
 

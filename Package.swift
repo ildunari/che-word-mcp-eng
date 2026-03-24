@@ -6,8 +6,8 @@ let package = Package(
     platforms: [.macOS(.v13)],
     dependencies: [
         .package(path: "Vendor/swift-sdk"),
-        .package(url: "https://github.com/kiki830621/ooxml-swift.git", from: "0.5.1"),
-        .package(url: "https://github.com/kiki830621/word-to-md-swift.git", from: "0.3.0"),
+        .package(path: "Vendor/ooxml-swift"),
+        .package(path: "Vendor/word-to-md-swift"),
     ],
     targets: [
         .executableTarget(

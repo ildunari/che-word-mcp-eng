@@ -35,6 +35,8 @@ Create, read, edit, and export Word documents (.docx) directly from Claude or an
 
 **149 tools** covering: document management, content operations, formatting, range-aware inline editing, tables, styles, lists, page setup, headers/footers, images, export (text & markdown), hyperlinks, bookmarks, comments, track changes, footnotes, endnotes, field codes, and more.
 
+Comment replies use `parent_comment_id` + `text`, and tracked revisions can be listed or accepted/rejected either one at a time or all at once.
+
 ## Links
 
 - [Full documentation](https://github.com/ildunari/che-word-mcp-eng)

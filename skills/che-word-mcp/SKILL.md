@@ -1,6 +1,6 @@
 # che-word-mcp
 
-A Swift-native MCP server for Microsoft Word (.docx) document manipulation. Provides 147 tools for reading, writing, and modifying Word documents without requiring Microsoft Word installation.
+A Swift-native MCP server for Microsoft Word (.docx) document manipulation. Provides 149 tools for reading, writing, and modifying Word documents without requiring Microsoft Word installation.
 
 ## When to Use
 
@@ -73,6 +73,24 @@ export_markdown(source_path: "/path/to/document.docx", path: "/path/to/output.md
 → Returns Markdown format
 ```
 
+### Comments and Tracked Revisions
+
+```text
+1. list_comments(doc_id: "report")
+   → Returns comment IDs for follow-up actions
+
+2. reply_to_comment(doc_id: "report", parent_comment_id: 12, text: "Thanks, updated.", author: "Claude")
+   → Adds a reply to an existing comment
+
+3. get_revisions(doc_id: "report")
+   → Returns native tracked revisions, including changes that survive save/reopen
+
+4. accept_revision(doc_id: "report", revision_id: 4)
+   reject_revision(doc_id: "report", revision_id: 5)
+   accept_all_revisions(doc_id: "report")
+   reject_all_revisions(doc_id: "report")
+```
+
 ## Safety Rules
 
 - Do not assume in-memory edits are persisted until `save_document` succeeds.
@@ -138,10 +156,12 @@ export_markdown(source_path: "/path/to/document.docx", path: "/path/to/output.md
 
 - `insert_comment` / `update_comment` / `delete_comment`
 - `list_comments` - Get all comments
-- `reply_to_comment` - Add reply
+- `reply_to_comment` - Add reply with `parent_comment_id` + `text`
 - `resolve_comment` - Mark resolved
 - `enable_track_changes` / `disable_track_changes`
+- `get_revisions` - Inspect native tracked revisions, including changes that survive save/reopen
 - `accept_revision` / `reject_revision`
+- `accept_all_revisions` / `reject_all_revisions`
 
 ### Lists
 

@@ -6,7 +6,7 @@
 che-word-mcp-eng/
 ├── Sources/
 │   └── CheWordMCP/
-│       └── Server.swift          # MCP server entry point (147 tools)
+│       └── Server.swift          # MCP server entry point (149 tools)
 ├── mcpb/                         # MCPB packaging directory
 │   ├── manifest.json             # MCPB manifest
 │   ├── server/
@@ -71,3 +71,8 @@ gh release upload v1.x.0 mcpb/che-word-mcp.mcpb
 - **ooxml-swift**: https://github.com/kiki830621/ooxml-swift (core OOXML library)
 - **macdoc**: /Users/che/Developer/macdoc (Word->Markdown CLI, delegated target for `export_markdown`)
 - **che-claude-plugins**: plugin definitions including this project
+
+## MCP Transport Note
+
+- The built server speaks newline-delimited stdio JSON-RPC, not `Content-Length` framing.
+- Use `./scripts/stdio_smoke.swift` after `swift build` for an end-to-end binary smoke check.

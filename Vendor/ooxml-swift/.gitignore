@@ -1,0 +1,15 @@
+# Build artifacts
+.build/
+.swiftpm/
+DerivedData/
+
+# Package resolved (optional - can include or exclude)
+# Package.resolved
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+
+# macOS
+.DS_Store

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] - 2026-03-24
+
+### Added
+- real stdio MCP smoke harness at `scripts/stdio_smoke.swift`
+- regression coverage for native revision persistence across save/reopen, mixed native revisions plus new edits, reply threading output, and `replace_text` edge cases
+
+### Changed
+- switched local dependency carry to tracked vendored packages for `ooxml-swift`, `word-to-md-swift`, and `doc-converter-swift`
+- `list_comments` now labels replies as replies with `parent_comment_id` context instead of surfacing them as `para -1`
+- developer docs now call out the newline-delimited stdio transport and the binary smoke harness
+
+### Fixed
+- tracked paragraph edits, range replacements, and range formatting now persist as native OOXML revisions that survive save/reopen
+- `accept_revision` / `reject_revision` / `accept_all_revisions` / `reject_all_revisions` now operate on native persisted revisions after reopen
+- `replace_text` now rejects empty `find` values and falls back to run-only behavior when hyperlinks are present
+
 ## [1.18.0] - 2026-03-23
 
 ### Added

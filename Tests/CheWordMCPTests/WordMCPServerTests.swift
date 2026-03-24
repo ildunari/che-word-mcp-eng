@@ -444,4 +444,666 @@ final class WordMCPServerTests: XCTestCase {
         XCTAssertTrue(runs[1].properties.bold)
         XCTAssertEqual(runs[1].properties.color, "FF0000")
     }
+
+    func testReplyToCommentAcceptsCanonicalParameterNames() async {
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(name: "create_document", arguments: ["doc_id": .string("doc")])
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: ["doc_id": .string("doc"), "text": .string("Comment target")]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "insert_comment",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "author": .string("Reviewer"),
+                "text": .string("Needs work")
+            ]
+        )
+
+        let replyResult = await server.invokeToolForTesting(
+            name: "reply_to_comment",
+            arguments: [
+                "doc_id": .string("doc"),
+                "parent_comment_id": .int(1),
+                "text": .string("Handled"),
+                "author": .string("Author")
+            ]
+        )
+
+        XCTAssertNil(replyResult.isError)
+
+        let commentsResult = await server.invokeToolForTesting(
+            name: "list_comments",
+            arguments: ["doc_id": .string("doc")]
+        )
+        let commentsText = resultText(commentsResult)
+        XCTAssertTrue(commentsText.contains("Handled"))
+        XCTAssertTrue(commentsText.contains("Author"))
+    }
+
+    func testReplyToCommentSupportsLegacyAliasParameters() async {
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(name: "create_document", arguments: ["doc_id": .string("doc")])
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: ["doc_id": .string("doc"), "text": .string("Comment target")]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "insert_comment",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "author": .string("Reviewer"),
+                "text": .string("Needs work")
+            ]
+        )
+
+        let replyResult = await server.invokeToolForTesting(
+            name: "reply_to_comment",
+            arguments: [
+                "doc_id": .string("doc"),
+                "comment_id": .int(1),
+                "reply_text": .string("Legacy handled")
+            ]
+        )
+
+        XCTAssertNil(replyResult.isError)
+        XCTAssertTrue(resultText(replyResult).contains("reply ID"))
+        XCTAssertTrue(resultText(replyResult).contains("by Author"))
+    }
+
+    func testFormatTextRangeRejectsEmptyParagraphOutOfRange() async throws {
+        let url = tempURL("empty-para")
+        var document = WordDocument()
+        document.appendParagraph(Paragraph(text: ""))
+        try writeDocument(document, to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(0),
+                "end": .int(50),
+                "bold": .bool(true)
+            ]
+        )
+
+        XCTAssertEqual(formatResult.isError, true)
+        XCTAssertTrue(resultText(formatResult).contains("Invalid text range start=0 end=50 for paragraph length 0"))
+    }
+
+    func testGetRevisionsReturnsNativeRevisionsAfterEdit() async throws {
+        let url = tempURL("revision-open")
+        try writeDocument(text: "Original", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+
+        _ = await server.invokeToolForTesting(
+            name: "update_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "index": .int(0),
+                "text": .string("Changed")
+            ]
+        )
+
+        let revisionsResult = await server.invokeToolForTesting(
+            name: "get_revisions",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let revisionsText = resultText(revisionsResult)
+        XCTAssertNil(revisionsResult.isError)
+        XCTAssertTrue(revisionsText.contains("Original"))
+        XCTAssertTrue(revisionsText.contains("Revisions in document"))
+        XCTAssertTrue(revisionsText.contains("Changed"))
+    }
+
+    func testAcceptRevisionWithSinglePendingRevisionKeepsDocumentState() async throws {
+        let url = tempURL("accept-single")
+        try writeDocument(text: "Original", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "update_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "index": .int(0),
+                "text": .string("Accepted")
+            ]
+        )
+
+        let acceptResult = await server.invokeToolForTesting(
+            name: "accept_revision",
+            arguments: [
+                "doc_id": .string("doc"),
+                "revision_id": .int(1)
+            ]
+        )
+
+        XCTAssertNil(acceptResult.isError)
+        XCTAssertEqual(try readDocumentText(from: url), "Accepted")
+
+        let revisionsResult = await server.invokeToolForTesting(
+            name: "get_revisions",
+            arguments: ["doc_id": .string("doc")]
+        )
+        XCTAssertTrue(resultText(revisionsResult).contains("No revisions"))
+    }
+
+    func testRejectRevisionWithSinglePendingRevisionRestoresPriorDocumentState() async throws {
+        let url = tempURL("reject-single")
+        try writeDocument(text: "Original", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "update_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "index": .int(0),
+                "text": .string("Rejected")
+            ]
+        )
+
+        let rejectResult = await server.invokeToolForTesting(
+            name: "reject_revision",
+            arguments: [
+                "doc_id": .string("doc"),
+                "revision_id": .int(1)
+            ]
+        )
+
+        XCTAssertNil(rejectResult.isError)
+        XCTAssertEqual(try readDocumentText(from: url), "Original")
+
+        let revisionsResult = await server.invokeToolForTesting(
+            name: "get_revisions",
+            arguments: ["doc_id": .string("doc")]
+        )
+        XCTAssertTrue(resultText(revisionsResult).contains("No revisions"))
+    }
+
+    func testAcceptAndRejectAllUseNativeRevisions() async throws {
+        let acceptURL = tempURL("accept-all")
+        try writeDocument(text: "Base", to: acceptURL)
+
+        let acceptingServer = await WordMCPServer()
+        _ = await acceptingServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(acceptURL.path),
+                "doc_id": .string("accept"),
+                "autosave": .bool(true)
+            ]
+        )
+        _ = await acceptingServer.invokeToolForTesting(
+            name: "update_paragraph",
+            arguments: [
+                "doc_id": .string("accept"),
+                "index": .int(0),
+                "text": .string("Base updated")
+            ]
+        )
+        _ = await acceptingServer.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: [
+                "doc_id": .string("accept"),
+                "text": .string("Second line")
+            ]
+        )
+
+        let acceptAllResult = await acceptingServer.invokeToolForTesting(
+            name: "accept_all_revisions",
+            arguments: ["doc_id": .string("accept")]
+        )
+
+        XCTAssertNil(acceptAllResult.isError)
+        XCTAssertTrue(resultText(acceptAllResult).contains("Accepted 3 revision"))
+        XCTAssertTrue(try readDocumentText(from: acceptURL).contains("Second line"))
+
+        let rejectURL = tempURL("reject-all")
+        try writeDocument(text: "Base", to: rejectURL)
+
+        let rejectingServer = await WordMCPServer()
+        _ = await rejectingServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(rejectURL.path),
+                "doc_id": .string("reject"),
+                "autosave": .bool(true)
+            ]
+        )
+        _ = await rejectingServer.invokeToolForTesting(
+            name: "update_paragraph",
+            arguments: [
+                "doc_id": .string("reject"),
+                "index": .int(0),
+                "text": .string("Base updated")
+            ]
+        )
+        _ = await rejectingServer.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: [
+                "doc_id": .string("reject"),
+                "text": .string("Second line")
+            ]
+        )
+
+        let rejectAllResult = await rejectingServer.invokeToolForTesting(
+            name: "reject_all_revisions",
+            arguments: ["doc_id": .string("reject")]
+        )
+
+        XCTAssertNil(rejectAllResult.isError)
+        XCTAssertTrue(resultText(rejectAllResult).contains("Rejected 3 revision"))
+        XCTAssertEqual(try readDocumentText(from: rejectURL), "Base")
+    }
+
+    func testNativeRevisionsPersistAfterSaveAndReopen() async throws {
+        let url = tempURL("native-revisions")
+        try writeDocument(text: "Original", to: url)
+
+        let firstServer = await WordMCPServer()
+        _ = await firstServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "update_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "index": .int(0),
+                "text": .string("Changed")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "save_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "close_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let secondServer = await WordMCPServer()
+        _ = await secondServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("reopened")
+            ]
+        )
+
+        let revisionsResult = await secondServer.invokeToolForTesting(
+            name: "get_revisions",
+            arguments: ["doc_id": .string("reopened")]
+        )
+
+        XCTAssertNil(revisionsResult.isError)
+        XCTAssertTrue(resultText(revisionsResult).contains("Revisions in document"))
+        XCTAssertTrue(resultText(revisionsResult).contains("Original"))
+        XCTAssertTrue(resultText(revisionsResult).contains("Changed"))
+    }
+
+    func testRejectAllRevisionsAfterReopenRestoresOriginalText() async throws {
+        let url = tempURL("reject-after-reopen")
+        try writeDocument(text: "Original", to: url)
+
+        let firstServer = await WordMCPServer()
+        _ = await firstServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "update_paragraph",
+            arguments: [
+                "doc_id": .string("doc"),
+                "index": .int(0),
+                "text": .string("Changed")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "save_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "close_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let secondServer = await WordMCPServer()
+        _ = await secondServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("reopened"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let rejectResult = await secondServer.invokeToolForTesting(
+            name: "reject_all_revisions",
+            arguments: ["doc_id": .string("reopened")]
+        )
+
+        XCTAssertNil(rejectResult.isError)
+        XCTAssertEqual(try readDocumentText(from: url), "Original")
+    }
+
+    func testListCommentsShowsReplyParentIdsInsteadOfParaMinusOne() async {
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(name: "create_document", arguments: ["doc_id": .string("doc")])
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: ["doc_id": .string("doc"), "text": .string("Comment target")]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "insert_comment",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "author": .string("Reviewer"),
+                "text": .string("Needs work")
+            ]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "reply_to_comment",
+            arguments: [
+                "doc_id": .string("doc"),
+                "parent_comment_id": .int(1),
+                "text": .string("Handled"),
+                "author": .string("Author")
+            ]
+        )
+
+        let commentsResult = await server.invokeToolForTesting(
+            name: "list_comments",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let commentsText = resultText(commentsResult)
+        XCTAssertTrue(commentsText.contains("reply to 1"))
+        XCTAssertFalse(commentsText.contains("para -1"))
+    }
+
+    func testReplaceTextRangePersistsNativeRevisionAfterReopenAndRejectAllRestoresText() async throws {
+        let url = tempURL("replace-native-reopen")
+        try writeDocument(text: "Hello world", to: url)
+
+        let firstServer = await WordMCPServer()
+        _ = await firstServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "replace_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "replacement": .string("team")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "save_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "close_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let secondServer = await WordMCPServer()
+        _ = await secondServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("reopened"),
+                "autosave": .bool(true)
+            ]
+        )
+        let revisionsResult = await secondServer.invokeToolForTesting(
+            name: "get_revisions",
+            arguments: ["doc_id": .string("reopened")]
+        )
+        XCTAssertTrue(resultText(revisionsResult).contains("team"))
+
+        let rejectResult = await secondServer.invokeToolForTesting(
+            name: "reject_all_revisions",
+            arguments: ["doc_id": .string("reopened")]
+        )
+        XCTAssertNil(rejectResult.isError)
+        XCTAssertEqual(try readDocumentText(from: url), "Hello world")
+    }
+
+    func testFormatTextRangePersistsNativeRevisionAfterReopenAndRejectAllRestoresFormatting() async throws {
+        let url = tempURL("format-native-reopen")
+        try writeDocument(text: "Hello world", to: url)
+
+        let firstServer = await WordMCPServer()
+        _ = await firstServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "bold": .bool(true),
+                "color": .string("FF0000")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "save_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "close_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let secondServer = await WordMCPServer()
+        _ = await secondServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("reopened"),
+                "autosave": .bool(true)
+            ]
+        )
+        let revisionsResult = await secondServer.invokeToolForTesting(
+            name: "get_revisions",
+            arguments: ["doc_id": .string("reopened")]
+        )
+        XCTAssertTrue(resultText(revisionsResult).contains("RPRCHANGE"))
+
+        let rejectResult = await secondServer.invokeToolForTesting(
+            name: "reject_all_revisions",
+            arguments: ["doc_id": .string("reopened")]
+        )
+        XCTAssertNil(rejectResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertEqual(runs.map(\.text), ["Hello world"])
+        XCTAssertFalse(runs[0].properties.bold)
+        XCTAssertNil(runs[0].properties.color)
+    }
+
+    func testExistingNativeRevisionsRemainVisibleAfterNewEditAndRejectAllRestoresBaseline() async throws {
+        let url = tempURL("mixed-native-revisions")
+        try writeDocument(text: "Baseline", to: url)
+
+        let firstServer = await WordMCPServer()
+        _ = await firstServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("first")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "update_paragraph",
+            arguments: [
+                "doc_id": .string("first"),
+                "index": .int(0),
+                "text": .string("First edit")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "save_document",
+            arguments: ["doc_id": .string("first")]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "close_document",
+            arguments: ["doc_id": .string("first")]
+        )
+
+        let secondServer = await WordMCPServer()
+        _ = await secondServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("second"),
+                "autosave": .bool(true)
+            ]
+        )
+        _ = await secondServer.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: [
+                "doc_id": .string("second"),
+                "text": .string("Second edit")
+            ]
+        )
+
+        let revisionsResult = await secondServer.invokeToolForTesting(
+            name: "get_revisions",
+            arguments: ["doc_id": .string("second")]
+        )
+        let revisionsText = resultText(revisionsResult)
+        XCTAssertTrue(revisionsText.contains("Baseline"))
+        XCTAssertTrue(revisionsText.contains("First edit"))
+        XCTAssertTrue(revisionsText.contains("Second edit"))
+
+        let rejectAllResult = await secondServer.invokeToolForTesting(
+            name: "reject_all_revisions",
+            arguments: ["doc_id": .string("second")]
+        )
+        XCTAssertNil(rejectAllResult.isError)
+        XCTAssertEqual(try readDocumentText(from: url), "Baseline")
+    }
+
+    func testReplaceTextRejectsEmptyFindString() async throws {
+        let url = tempURL("replace-empty-find")
+        try writeDocument(text: "Hello world", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+
+        let replaceResult = await server.invokeToolForTesting(
+            name: "replace_text",
+            arguments: [
+                "doc_id": .string("doc"),
+                "find": .string(""),
+                "replace": .string("ignored")
+            ]
+        )
+
+        XCTAssertEqual(replaceResult.isError, true)
+        XCTAssertTrue(resultText(replaceResult).contains("find"))
+    }
+
+    func testReplaceTextStillWorksWhenParagraphContainsHyperlink() async throws {
+        let url = tempURL("replace-hyperlink")
+        var document = WordDocument()
+        let hyperlink = Hyperlink.external(
+            id: "link-1",
+            text: "docs",
+            url: "https://example.com",
+            relationshipId: "rId1"
+        )
+        var paragraph = Paragraph(runs: [Run(text: "See ")])
+        paragraph.hyperlinks = [hyperlink]
+        document.appendParagraph(paragraph)
+        try writeDocument(document, to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let replaceResult = await server.invokeToolForTesting(
+            name: "replace_text",
+            arguments: [
+                "doc_id": .string("doc"),
+                "find": .string("See"),
+                "replace": .string("Read")
+            ]
+        )
+
+        XCTAssertNil(replaceResult.isError)
+        XCTAssertTrue(try readDocumentText(from: url).contains("Read"))
+    }
 }
