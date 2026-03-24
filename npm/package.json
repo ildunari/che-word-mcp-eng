@@ -1,0 +1,39 @@
+{
+  "name": "che-word-mcp-kosta",
+  "version": "1.18.0",
+  "description": "Swift-native MCP server for Microsoft Word (.docx) manipulation — 149 tools, no runtime dependencies",
+  "author": "Che Cheng",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ildunari/che-word-mcp-eng.git"
+  },
+  "homepage": "https://github.com/ildunari/che-word-mcp-eng",
+  "keywords": [
+    "mcp",
+    "word",
+    "docx",
+    "ooxml",
+    "document",
+    "model-context-protocol",
+    "claude",
+    "ai"
+  ],
+  "bin": {
+    "che-word-mcp": "run.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "os": [
+    "darwin"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "files": [
+    "install.js",
+    "run.js",
+    "README.md"
+  ]
+}

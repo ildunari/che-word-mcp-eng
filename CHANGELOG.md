@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.16.0] - 2026-03-08
+## [1.18.0] - 2026-03-23
+
+### Added
+- `format_text_range` for precise inline formatting within a paragraph range
+- `replace_text_range` for range-aware replacement that preserves unaffected runs
+- catalog hardening coverage in `ToolCatalogTests`
+- inline-edit regression coverage in `InlineEditingTests` and handler coverage in `WordMCPServerTests`
+- tool-family smoke coverage in `ToolSmokeMatrixTests`
+- report-template integration coverage in `ReportTemplateIntegrationTests`
+
+### Changed
+- tool metadata is now enriched with MCP titles plus read-only, destructive, and idempotent hints where appropriate
+- `insert_text` now uses the local range-edit helper instead of rewriting the paragraph as a single run
+- README guidance now distinguishes paragraph-wide tools from range-aware editing tools
+
+### Fixed
+- clarified destructive semantics for `update_paragraph`, `format_text`, and `set_paragraph_format`
+- guarded inline editing now rejects unsupported mixed-content paragraphs instead of silently flattening them
 
 ## [1.17.0] - 2026-03-08
 

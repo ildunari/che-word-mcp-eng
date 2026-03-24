@@ -14,6 +14,10 @@ final class WordMCPServerTests: XCTestCase {
         try DocxWriter.write(document, to: url)
     }
 
+    private func writeDocument(_ document: WordDocument, to url: URL) throws {
+        try DocxWriter.write(document, to: url)
+    }
+
     private func readDocumentText(from url: URL) throws -> String {
         try DocxReader.read(from: url).getText()
     }
@@ -321,5 +325,123 @@ final class WordMCPServerTests: XCTestCase {
         XCTAssertEqual(finalizeResult.isError, true)
         XCTAssertTrue(resultText(finalizeResult).contains("No path was provided"))
         XCTAssertTrue(server.isDocumentDirtyForTesting("doc"))
+    }
+
+    func testInsertTextPreservesUnaffectedRuns() async throws {
+        let url = tempURL("insert-inline")
+        let document = TestFixtures.makeDocument(paragraphs: [
+            TestFixtures.makeParagraph(runs: [
+                TestFixtures.makeRun("Hello "),
+                TestFixtures.makeRun("world", bold: true)
+            ])
+        ])
+        try writeDocument(document, to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let insertResult = await server.invokeToolForTesting(
+            name: "insert_text",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "position": .int(6),
+                "text": .string("brave ")
+            ]
+        )
+
+        XCTAssertEqual(insertResult.isError, nil)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertEqual(runs.map(\.text), ["Hello ", "brave ", "world"])
+        XCTAssertFalse(runs[0].properties.bold)
+        XCTAssertFalse(runs[1].properties.bold)
+        XCTAssertTrue(runs[2].properties.bold)
+    }
+
+    func testReplaceTextRangeToolPreservesFormattingOutsideTarget() async throws {
+        let url = tempURL("replace-range")
+        let document = TestFixtures.makeDocument(paragraphs: [
+            TestFixtures.makeParagraph(runs: [
+                TestFixtures.makeRun("Hello "),
+                TestFixtures.makeRun("world", bold: true),
+                TestFixtures.makeRun("!")
+            ])
+        ])
+        try writeDocument(document, to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let replaceResult = await server.invokeToolForTesting(
+            name: "replace_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "replacement": .string("team")
+            ]
+        )
+
+        XCTAssertEqual(replaceResult.isError, nil)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertEqual(runs.map(\.text), ["Hello ", "team", "!"])
+        XCTAssertFalse(runs[0].properties.bold)
+        XCTAssertTrue(runs[1].properties.bold)
+        XCTAssertFalse(runs[2].properties.bold)
+    }
+
+    func testFormatTextRangeToolOnlyFormatsTargetSpan() async throws {
+        let url = tempURL("format-range")
+        try writeDocument(text: "Hello world", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "bold": .bool(true),
+                "color": .string("FF0000")
+            ]
+        )
+
+        XCTAssertEqual(formatResult.isError, nil)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertEqual(runs.map(\.text), ["Hello ", "world"])
+        XCTAssertFalse(runs[0].properties.bold)
+        XCTAssertTrue(runs[1].properties.bold)
+        XCTAssertEqual(runs[1].properties.color, "FF0000")
     }
 }

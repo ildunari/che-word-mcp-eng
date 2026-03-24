@@ -9,7 +9,7 @@ Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this
 - **Pure Swift Implementation**: No Node.js, Python, or external runtime required
 - **Direct OOXML Manipulation**: Works directly with XML, no Microsoft Word installation needed
 - **Single Binary**: Just one executable file
-- **147 MCP Tools**: Comprehensive document manipulation capabilities
+- **149 MCP Tools**: Comprehensive document manipulation capabilities
 - **Complete OOXML Support**: Full support for tables, styles, images, headers/footers, comments, footnotes, and more
 - **Cross-platform**: Works on macOS (and potentially other platforms supporting Swift)
 
@@ -17,6 +17,7 @@ Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.18.0 | 2026-03-23 | Add range-aware inline editing, MCP tool metadata hardening, and expanded regression/integration coverage |
 | v1.17.0 | 2026-03-08 | Add `get_document_session_state` and stronger finalize-first workflow guidance |
 | v1.16.0 | 2026-03-08 | Add `finalize_document`, safer document-session lifecycle, and fork-owned release packaging cleanup |
 | v1.15.2 | 2026-03-07 | Improve `list_all_formatted_text` tool description for better LLM parameter handling |
@@ -110,7 +111,7 @@ Use `che-word-mcp` for reading and writing Microsoft Word (.docx) files.
 Core workflow:
 1. `open_document` - Open an existing .docx file
 2. `get_text` / `get_paragraphs` - Read document content
-3. `insert_paragraph` / `format_text` - Modify content
+3. `insert_paragraph` / `replace_text_range` / `format_text_range` - Modify content safely
 4. `save_document` - Save changes back to disk
 5. `close_document` - Close only after save succeeds
 
@@ -129,6 +130,12 @@ Creating new documents:
 Export options:
 - `export_text` - Export as plain text
 - `export_markdown` - Export as Markdown
+
+Precise editing workflow:
+1. `get_paragraph_runs` - Inspect how a paragraph is split into formatted runs
+2. `replace_text_range` - Replace text in a character range without flattening unaffected runs
+3. `format_text_range` - Apply formatting to a range instead of reformatting the whole paragraph
+4. `format_text` / `update_paragraph` - Use only when paragraph-wide behavior is actually desired
 ```
 
 ### Claude Code Skill
@@ -148,7 +155,7 @@ Or copy from the repository:
 cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 ```
 
-## Available Tools (147 Total)
+## Available Tools (149 Total)
 
 ### Document Management (8 tools)
 
@@ -163,23 +170,25 @@ cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 | `list_open_documents` | List all open documents |
 | `get_document_info` | Get document statistics |
 
-### Content Operations (6 tools)
+### Content Operations (7 tools)
 
 | Tool | Description |
 |------|-------------|
 | `get_text` | Get plain text content |
 | `get_paragraphs` | Get all paragraphs with formatting |
 | `insert_paragraph` | Insert a new paragraph |
-| `update_paragraph` | Update paragraph content |
+| `update_paragraph` | Replace paragraph content with a full rewrite; may collapse inline formatting |
 | `delete_paragraph` | Delete a paragraph |
 | `replace_text` | Search and replace text |
+| `replace_text_range` | Replace text within a paragraph range while preserving unaffected runs |
 
-### Formatting (3 tools)
+### Formatting (4 tools)
 
 | Tool | Description |
 |------|-------------|
-| `format_text` | Apply text formatting (bold, italic, color, font) |
-| `set_paragraph_format` | Set paragraph formatting (alignment, spacing) |
+| `format_text` | Apply formatting to every run in a paragraph |
+| `format_text_range` | Apply formatting to a character range within a paragraph |
+| `set_paragraph_format` | Set paragraph layout formatting (alignment, spacing) |
 | `apply_style` | Apply built-in or custom styles |
 
 ### Tables (6 tools)

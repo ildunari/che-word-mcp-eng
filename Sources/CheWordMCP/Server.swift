@@ -20,7 +20,7 @@ class WordMCPServer {
     init() async {
         self.server = Server(
             name: "che-word-mcp",
-            version: "1.17.0",
+            version: "1.18.0",
             capabilities: .init(tools: .init())
         )
         self.transport = StdioTransport()
@@ -163,9 +163,106 @@ class WordMCPServer {
         await flushDirtyDocumentsOnShutdown()
     }
 
+    func toolsForTesting() -> [Tool] {
+        allTools
+    }
+
+    func toolNamesForTesting() -> [String] {
+        allTools.map(\.name)
+    }
+
+    private var readOnlyToolNames: Set<String> {
+        let exactReadOnlyNames: Set<String> = [
+            "compare_documents",
+            "export_markdown",
+            "export_text",
+            "get_document_properties",
+            "get_document_session_state",
+            "get_paragraph_runs",
+            "get_revisions",
+            "get_section_properties",
+            "get_tables",
+            "get_text_with_formatting",
+            "get_word_count_by_section",
+        ]
+
+        return Set(rawTools.map(\.name).filter { name in
+            name.hasPrefix("get_")
+                || name.hasPrefix("list_")
+                || name.hasPrefix("search_")
+                || exactReadOnlyNames.contains(name)
+        })
+    }
+
+    private var destructiveToolNames: Set<String> {
+        Set(rawTools.map(\.name).filter { name in
+            name.hasPrefix("delete_")
+                || name.hasPrefix("reject_")
+                || name.hasPrefix("remove_")
+                || name.hasPrefix("protect_")
+                || name.hasPrefix("unprotect_")
+                || name.contains("password")
+        })
+    }
+
+    private var idempotentToolNames: Set<String> {
+        let extraIdempotentNames: Set<String> = [
+            "disable_track_changes",
+            "enable_track_changes",
+        ]
+
+        return Set(rawTools.map(\.name).filter { name in
+            name.hasPrefix("set_") || extraIdempotentNames.contains(name)
+        })
+    }
+
+    private func title(for toolName: String) -> String {
+        toolName
+            .split(separator: "_")
+            .map { segment in
+                segment.prefix(1).uppercased() + segment.dropFirst()
+            }
+            .joined(separator: " ")
+    }
+
+    private func overrideDescription(for tool: Tool) -> String? {
+        switch tool.name {
+        case "format_text":
+            return "Format every run in the specified paragraph (bold, italics, color, etc.); this is paragraph-scoped, not range-scoped."
+        case "set_paragraph_format":
+            return "Set paragraph layout/properties only (alignment, spacing, etc.); this does not change inline run formatting."
+        case "update_paragraph":
+            return "Replace the text content of an existing paragraph; this full rewrite may collapse existing inline formatting into plain text."
+        default:
+            return tool.description
+        }
+    }
+
+    private func enrichToolMetadata(_ tool: Tool) -> Tool {
+        var updatedTool = tool
+        updatedTool.annotations = Tool.Annotations(
+            title: title(for: tool.name),
+            readOnlyHint: readOnlyToolNames.contains(tool.name) ? true : nil,
+            destructiveHint: destructiveToolNames.contains(tool.name) ? true : nil,
+            idempotentHint: idempotentToolNames.contains(tool.name) ? true : nil,
+            openWorldHint: false
+        )
+        updatedTool = Tool(
+            name: updatedTool.name,
+            description: overrideDescription(for: updatedTool),
+            inputSchema: updatedTool.inputSchema,
+            annotations: updatedTool.annotations
+        )
+        return updatedTool
+    }
+
     // MARK: - Tools Definition
 
     private var allTools: [Tool] {
+        rawTools.map(enrichToolMetadata)
+    }
+
+    private var rawTools: [Tool] {
         [
             Tool(
                 name: "create_document",
@@ -455,6 +552,121 @@ class WordMCPServer {
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
+                ])
+            ),
+            Tool(
+                name: "format_text_range",
+                description: "Format text within a character range of a paragraph without reformatting the whole paragraph.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("file identification code")
+                        ]),
+                        "paragraph_index": .object([
+                            "type": .string("integer"),
+                            "description": .string("Paragraph index (starting from 0)")
+                        ]),
+                        "start": .object([
+                            "type": .string("integer"),
+                            "description": .string("Start character offset within the paragraph")
+                        ]),
+                        "end": .object([
+                            "type": .string("integer"),
+                            "description": .string("End character offset within the paragraph")
+                        ]),
+                        "bold": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Bold")
+                        ]),
+                        "italic": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Italics")
+                        ]),
+                        "underline": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Underline")
+                        ]),
+                        "font_size": .object([
+                            "type": .string("integer"),
+                            "description": .string("Font size (points, e.g. 12)")
+                        ]),
+                        "font_name": .object([
+                            "type": .string("string"),
+                            "description": .string("Font name (e.g. Arial, Times New Roman)")
+                        ]),
+                        "color": .object([
+                            "type": .string("string"),
+                            "description": .string("Text color (RGB hexadecimal, such as FF0000 means red)")
+                        ])
+                    ]),
+                    "required": .array([
+                        .string("doc_id"),
+                        .string("paragraph_index"),
+                        .string("start"),
+                        .string("end")
+                    ])
+                ])
+            ),
+            Tool(
+                name: "replace_text_range",
+                description: "Replace text within a character range of a paragraph while preserving unaffected inline formatting.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("file identification code")
+                        ]),
+                        "paragraph_index": .object([
+                            "type": .string("integer"),
+                            "description": .string("Paragraph index (starting from 0)")
+                        ]),
+                        "start": .object([
+                            "type": .string("integer"),
+                            "description": .string("Start character offset within the paragraph")
+                        ]),
+                        "end": .object([
+                            "type": .string("integer"),
+                            "description": .string("End character offset within the paragraph")
+                        ]),
+                        "replacement": .object([
+                            "type": .string("string"),
+                            "description": .string("Replacement text; use an empty string to delete the target range")
+                        ]),
+                        "bold": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Optional formatting override for the replacement text")
+                        ]),
+                        "italic": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Optional formatting override for the replacement text")
+                        ]),
+                        "underline": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Optional formatting override for the replacement text")
+                        ]),
+                        "font_size": .object([
+                            "type": .string("integer"),
+                            "description": .string("Optional replacement font size (points, e.g. 12)")
+                        ]),
+                        "font_name": .object([
+                            "type": .string("string"),
+                            "description": .string("Optional replacement font name")
+                        ]),
+                        "color": .object([
+                            "type": .string("string"),
+                            "description": .string("Optional replacement text color (RGB hexadecimal)")
+                        ])
+                    ]),
+                    "required": .array([
+                        .string("doc_id"),
+                        .string("paragraph_index"),
+                        .string("start"),
+                        .string("end"),
+                        .string("replacement")
+                    ])
                 ])
             ),
             Tool(
@@ -3909,6 +4121,10 @@ class WordMCPServer {
 
         case "format_text":
             return try await formatText(args: args)
+        case "format_text_range":
+            return try await formatTextRange(args: args)
+        case "replace_text_range":
+            return try await replaceTextRange(args: args)
         case "set_paragraph_format":
             return try await setParagraphFormat(args: args)
         case "apply_style":
@@ -4501,6 +4717,17 @@ class WordMCPServer {
 
     // MARK: - Formatting
 
+    private func runPropertiesFromArgs(_ args: [String: Value]) -> RunProperties {
+        var format = RunProperties()
+        if let bold = args["bold"]?.boolValue { format.bold = bold }
+        if let italic = args["italic"]?.boolValue { format.italic = italic }
+        if let underline = args["underline"]?.boolValue { format.underline = underline ? .single : nil }
+        if let fontSize = args["font_size"]?.intValue { format.fontSize = fontSize * 2 }
+        if let fontName = args["font_name"]?.stringValue { format.fontName = fontName }
+        if let color = args["color"]?.stringValue { format.color = color }
+        return format
+    }
+
     private func formatText(args: [String: Value]) async throws -> String {
         guard let docId = args["doc_id"]?.stringValue else {
             throw WordError.missingParameter("doc_id")
@@ -4514,18 +4741,82 @@ class WordMCPServer {
 
         enforceTrackChangesIfNeeded(&doc, docId: docId)
 
-        var format = RunProperties()
-        if let bold = args["bold"]?.boolValue { format.bold = bold }
-        if let italic = args["italic"]?.boolValue { format.italic = italic }
-        if let underline = args["underline"]?.boolValue { format.underline = underline ? .single : nil }
-        if let fontSize = args["font_size"]?.intValue { format.fontSize = fontSize * 2 }
-        if let fontName = args["font_name"]?.stringValue { format.fontName = fontName }
-        if let color = args["color"]?.stringValue { format.color = color }
+        let format = runPropertiesFromArgs(args)
 
         try doc.formatParagraph(at: paragraphIndex, with: format)
         try await storeDocument(doc, for: docId)
 
         return "Applied formatting to paragraph \(paragraphIndex)"
+    }
+
+    private func formatTextRange(args: [String: Value]) async throws -> String {
+        guard let docId = args["doc_id"]?.stringValue else {
+            throw WordError.missingParameter("doc_id")
+        }
+        guard let paragraphIndex = args["paragraph_index"]?.intValue else {
+            throw WordError.missingParameter("paragraph_index")
+        }
+        guard let start = args["start"]?.intValue else {
+            throw WordError.missingParameter("start")
+        }
+        guard let end = args["end"]?.intValue else {
+            throw WordError.missingParameter("end")
+        }
+        guard var doc = openDocuments[docId] else {
+            throw WordError.documentNotFound(docId)
+        }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
+        try doc.formatTextRange(
+            at: paragraphIndex,
+            start: start,
+            end: end,
+            format: runPropertiesFromArgs(args)
+        )
+        try await storeDocument(doc, for: docId)
+
+        return "Applied formatting to paragraph \(paragraphIndex), range \(start)..<\(end)"
+    }
+
+    private func replaceTextRange(args: [String: Value]) async throws -> String {
+        guard let docId = args["doc_id"]?.stringValue else {
+            throw WordError.missingParameter("doc_id")
+        }
+        guard let paragraphIndex = args["paragraph_index"]?.intValue else {
+            throw WordError.missingParameter("paragraph_index")
+        }
+        guard let start = args["start"]?.intValue else {
+            throw WordError.missingParameter("start")
+        }
+        guard let end = args["end"]?.intValue else {
+            throw WordError.missingParameter("end")
+        }
+        guard let replacement = args["replacement"]?.stringValue else {
+            throw WordError.missingParameter("replacement")
+        }
+        guard var doc = openDocuments[docId] else {
+            throw WordError.documentNotFound(docId)
+        }
+
+        enforceTrackChangesIfNeeded(&doc, docId: docId)
+
+        let replacementProperties: RunProperties? =
+            ["bold", "italic", "underline", "font_size", "font_name", "color"]
+            .contains { args[$0] != nil }
+            ? runPropertiesFromArgs(args)
+            : nil
+
+        try doc.replaceTextRange(
+            at: paragraphIndex,
+            start: start,
+            end: end,
+            replacement: replacement,
+            replacementProperties: replacementProperties
+        )
+        try await storeDocument(doc, for: docId)
+
+        return "Replaced text in paragraph \(paragraphIndex), range \(start)..<\(end)"
     }
 
     private func setParagraphFormat(args: [String: Value]) async throws -> String {
@@ -6735,12 +7026,15 @@ class WordMCPServer {
 
         let currentText = paragraphs[paragraphIndex].getText()
         let insertPosition = position ?? currentText.count
+        let clampedPosition = max(0, min(insertPosition, currentText.count))
 
-        let startIndex = currentText.startIndex
-        let insertIndex = currentText.index(startIndex, offsetBy: min(insertPosition, currentText.count))
-        let newText = String(currentText[..<insertIndex]) + text + String(currentText[insertIndex...])
-
-        try doc.updateParagraph(at: paragraphIndex, text: newText)
+        try doc.replaceTextRange(
+            at: paragraphIndex,
+            start: clampedPosition,
+            end: clampedPosition,
+            replacement: text,
+            replacementProperties: nil
+        )
         try await storeDocument(doc, for: docId)
 
         return "Inserted text at paragraph \(paragraphIndex)\(position.map { ", position \($0)" } ?? " (at end)")"
