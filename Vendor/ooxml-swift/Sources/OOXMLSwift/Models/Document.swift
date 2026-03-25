@@ -80,11 +80,37 @@ public struct WordDocument: Equatable {
 
     public func getParagraphs() -> [Paragraph] {
         return body.children.compactMap { child in
-            if case .paragraph(let para) = child {
+            if case .paragraph(let para) = child, !para.isFullyDeletedTrackedParagraph {
                 return para
             }
             return nil
         }
+    }
+
+    public func visibleParagraphStorageIndices() -> [Int] {
+        body.children.enumerated().compactMap { index, child in
+            guard case .paragraph(let para) = child, !para.isFullyDeletedTrackedParagraph else {
+                return nil
+            }
+            return index
+        }
+    }
+
+    public func visibleParagraphStorageIndex(for index: Int) throws -> Int {
+        let paragraphIndices = visibleParagraphStorageIndices()
+        guard index >= 0 && index < paragraphIndices.count else {
+            throw WordError.invalidIndex(index)
+        }
+        return paragraphIndices[index]
+    }
+
+    public func visibleParagraphInsertionStorageIndex(for index: Int) -> Int {
+        let paragraphIndices = visibleParagraphStorageIndices()
+        let clampedIndex = min(max(0, index), paragraphIndices.count)
+        guard clampedIndex < paragraphIndices.count else {
+            return body.children.count
+        }
+        return paragraphIndices[clampedIndex]
     }
 
     // MARK: - Paragraph Operations
@@ -102,26 +128,17 @@ public struct WordDocument: Equatable {
             trackInsertedParagraph(paragraph, at: index)
             return
         }
-        let clampedIndex = min(max(0, index), body.children.count)
+        let clampedIndex = visibleParagraphInsertionStorageIndex(for: index)
         body.children.insert(.paragraph(paragraph), at: clampedIndex)
     }
 
     public mutating func updateParagraph(at index: Int, text: String) throws {
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-
-        guard index >= 0 && index < paragraphIndices.count else {
-            throw WordError.invalidIndex(index)
-        }
-
         if revisions.settings.enabled {
             try trackUpdatedParagraph(at: index, text: text)
             return
         }
 
-        let actualIndex = paragraphIndices[index]
+        let actualIndex = try visibleParagraphStorageIndex(for: index)
         if case .paragraph(var para) = body.children[actualIndex] {
             para.runs = [Run(text: text)]
             body.children[actualIndex] = .paragraph(para)
@@ -129,21 +146,12 @@ public struct WordDocument: Equatable {
     }
 
     public mutating func deleteParagraph(at index: Int) throws {
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-
-        guard index >= 0 && index < paragraphIndices.count else {
-            throw WordError.invalidIndex(index)
-        }
-
         if revisions.settings.enabled {
             try trackDeletedParagraph(at: index)
             return
         }
 
-        let actualIndex = paragraphIndices[index]
+        let actualIndex = try visibleParagraphStorageIndex(for: index)
         body.children.remove(at: actualIndex)
     }
 
@@ -179,16 +187,7 @@ public struct WordDocument: Equatable {
             try trackFormattedParagraph(at: index, with: format)
             return
         }
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-
-        guard index >= 0 && index < paragraphIndices.count else {
-            throw WordError.invalidIndex(index)
-        }
-
-        let actualIndex = paragraphIndices[index]
+        let actualIndex = try visibleParagraphStorageIndex(for: index)
         if case .paragraph(var para) = body.children[actualIndex] {
             for i in 0..<para.runs.count {
                 para.runs[i].properties.merge(with: format)
@@ -202,16 +201,7 @@ public struct WordDocument: Equatable {
             try trackParagraphProperties(at: index, updates: properties)
             return
         }
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-
-        guard index >= 0 && index < paragraphIndices.count else {
-            throw WordError.invalidIndex(index)
-        }
-
-        let actualIndex = paragraphIndices[index]
+        let actualIndex = try visibleParagraphStorageIndex(for: index)
         if case .paragraph(var para) = body.children[actualIndex] {
             para.properties.merge(with: properties)
             body.children[actualIndex] = .paragraph(para)
@@ -225,16 +215,7 @@ public struct WordDocument: Equatable {
             try trackParagraphProperties(at: index, updates: properties)
             return
         }
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-
-        guard index >= 0 && index < paragraphIndices.count else {
-            throw WordError.invalidIndex(index)
-        }
-
-        let actualIndex = paragraphIndices[index]
+        let actualIndex = try visibleParagraphStorageIndex(for: index)
         if case .paragraph(var para) = body.children[actualIndex] {
             para.properties.style = style
             body.children[actualIndex] = .paragraph(para)

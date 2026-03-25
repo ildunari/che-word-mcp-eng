@@ -1,5 +1,13 @@
 import Foundation
 
+private struct EditableTrackedSegment {
+    let sourceTrackedIndex: Int
+    let run: Run
+    let revision: Revision?
+    let start: Int
+    let end: Int
+}
+
 extension WordDocument {
     mutating func makeRevision(
         type: RevisionType,
@@ -29,21 +37,12 @@ extension WordDocument {
             paragraphIndex: paragraphIndex,
             newText: paragraph.getText()
         )
-        let clampedIndex = min(max(0, index), body.children.count)
+        let clampedIndex = visibleParagraphInsertionStorageIndex(for: index)
         body.children.insert(.paragraph(trackedParagraph), at: clampedIndex)
     }
 
     mutating func trackUpdatedParagraph(at index: Int, text: String) throws {
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-
-        guard index >= 0 && index < paragraphIndices.count else {
-            throw WordError.invalidIndex(index)
-        }
-
-        let actualIndex = paragraphIndices[index]
+        let actualIndex = try visibleParagraphStorageIndex(for: index)
         if case .paragraph(var para) = body.children[actualIndex] {
             let deletedRevision = makeRevision(
                 type: .deletion,
@@ -65,16 +64,7 @@ extension WordDocument {
     }
 
     mutating func trackDeletedParagraph(at index: Int) throws {
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-
-        guard index >= 0 && index < paragraphIndices.count else {
-            throw WordError.invalidIndex(index)
-        }
-
-        let actualIndex = paragraphIndices[index]
+        let actualIndex = try visibleParagraphStorageIndex(for: index)
         if case .paragraph(var para) = body.children[actualIndex] {
             let deletionRevision = makeRevision(
                 type: .deletion,
@@ -90,16 +80,7 @@ extension WordDocument {
     }
 
     mutating func trackFormattedParagraph(at index: Int, with format: RunProperties) throws {
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-
-        guard index >= 0 && index < paragraphIndices.count else {
-            throw WordError.invalidIndex(index)
-        }
-
-        let actualIndex = paragraphIndices[index]
+        let actualIndex = try visibleParagraphStorageIndex(for: index)
         if case .paragraph(var para) = body.children[actualIndex] {
             let revision = makeRevision(type: .formatChange, paragraphIndex: index)
             for runIndex in para.runs.indices {
@@ -121,16 +102,7 @@ extension WordDocument {
     }
 
     mutating func trackParagraphProperties(at index: Int, updates: ParagraphProperties) throws {
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-
-        guard index >= 0 && index < paragraphIndices.count else {
-            throw WordError.invalidIndex(index)
-        }
-
-        let actualIndex = paragraphIndices[index]
+        let actualIndex = try visibleParagraphStorageIndex(for: index)
         if case .paragraph(var para) = body.children[actualIndex] {
             let previous = para.properties
             let revision = makeRevision(type: .paragraphChange, paragraphIndex: index)
@@ -147,6 +119,9 @@ extension WordDocument {
 
     mutating func normalizeTrackedParagraph(_ paragraph: Paragraph) -> Paragraph {
         var paragraph = paragraph
+        if paragraph.trackedRuns?.isEmpty == true {
+            paragraph.trackedRuns = nil
+        }
         if let trackedRuns = paragraph.trackedRuns, trackedRuns.allSatisfy({ !$0.isDeleted && $0.revision == nil }) {
             paragraph.runs = trackedRuns.map(\.run)
             paragraph.trackedRuns = nil
@@ -159,14 +134,29 @@ extension WordDocument {
             return [revision.id]
         }
 
-        let partners = revisions.revisions.filter { candidate in
-            candidate.id != revision.id
-                && candidate.paragraphIndex == revision.paragraphIndex
-                && abs(candidate.id - revision.id) == 1
-                && Set([candidate.type, revision.type]) == Set([.insertion, .deletion])
+        let expectedPartnerId: Int
+        let expectedPartnerType: RevisionType
+
+        switch revision.type {
+        case .deletion:
+            expectedPartnerId = revision.id + 1
+            expectedPartnerType = .insertion
+        case .insertion:
+            expectedPartnerId = revision.id - 1
+            expectedPartnerType = .deletion
+        default:
+            return [revision.id]
         }
 
-        return Set([revision.id] + partners.map(\.id))
+        guard let partner = revisions.revisions.first(where: { candidate in
+            candidate.id == expectedPartnerId
+                && candidate.paragraphIndex == revision.paragraphIndex
+                && candidate.type == expectedPartnerType
+        }) else {
+            return [revision.id]
+        }
+
+        return Set([revision.id, partner.id])
     }
 
     public mutating func trackReplaceTextRange(
@@ -176,20 +166,13 @@ extension WordDocument {
         replacement: String,
         replacementProperties: RunProperties?
     ) throws {
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-        guard paragraphIndex >= 0 && paragraphIndex < paragraphIndices.count else {
-            throw WordError.invalidIndex(paragraphIndex)
-        }
-
-        let actualIndex = paragraphIndices[paragraphIndex]
+        let actualIndex = try visibleParagraphStorageIndex(for: paragraphIndex)
         guard case .paragraph(var paragraph) = body.children[actualIndex] else {
             throw WordError.invalidIndex(paragraphIndex)
         }
 
-        let segments = splitVisibleSegments(for: paragraph, boundaries: [start, end])
+        let sourceTrackedRuns = paragraph.trackedRuns ?? paragraph.runs.map { TrackedRun(run: $0) }
+        let segments = splitEditableTrackedSegments(for: paragraph, boundaries: [start, end])
         let paragraphLength = segments.last?.end ?? 0
         guard start >= 0, end >= start, end <= paragraphLength else {
             throw WordError.invalidParameter("range", "Invalid range \(start)..<\(end)")
@@ -207,48 +190,87 @@ extension WordDocument {
         ) : nil
 
         let inheritedProperties = replacementProperties ?? inheritedRunProperties(in: segments, start: start, end: end)
+        let touchedSegments = segments.filter { $0.start < end && $0.end > start }
+        let segmentsBySourceIndex = Dictionary(grouping: segments, by: \.sourceTrackedIndex)
         var trackedRuns: [TrackedRun] = []
         var inserted = false
 
-        for segment in segments {
-            if segment.end <= start {
-                trackedRuns.append(TrackedRun(run: segment.run))
+        for (sourceIndex, trackedRun) in sourceTrackedRuns.enumerated() {
+            if trackedRun.isDeleted {
+                trackedRuns.append(trackedRun)
                 continue
             }
 
-            if !inserted {
-                if start < end {
-                    let deletedSegments = segments.filter { $0.start < end && $0.end > start }
-                    for deletedSegment in deletedSegments {
-                        trackedRuns.append(TrackedRun(run: deletedSegment.run, revision: deletionRevision, isDeleted: true))
-                    }
+            let sourceSegments = segmentsBySourceIndex[sourceIndex] ?? []
+            for segment in sourceSegments {
+                if segment.end <= start {
+                    trackedRuns.append(TrackedRun(run: segment.run, revision: segment.revision))
+                    continue
                 }
-                if let insertionRevision, !replacement.isEmpty {
-                    trackedRuns.append(
-                        TrackedRun(
-                            run: Run(text: replacement, properties: inheritedProperties),
-                            revision: insertionRevision
-                        )
-                    )
-                }
-                inserted = true
-            }
 
-            if segment.start >= end {
-                trackedRuns.append(TrackedRun(run: segment.run))
+                if segment.start >= end {
+                    if !inserted {
+                        if start < end {
+                            for deletedSegment in touchedSegments {
+                                trackedRuns.append(
+                                    TrackedRun(
+                                        run: deletedSegment.run,
+                                        revision: deletionRevision,
+                                        isDeleted: true
+                                    )
+                                )
+                            }
+                        }
+                        if let insertionRevision, !replacement.isEmpty {
+                            trackedRuns.append(
+                                TrackedRun(
+                                    run: Run(text: replacement, properties: inheritedProperties),
+                                    revision: insertionRevision
+                                )
+                            )
+                        }
+                        inserted = true
+                    }
+                    trackedRuns.append(TrackedRun(run: segment.run, revision: segment.revision))
+                }
             }
         }
 
         if !inserted, let insertionRevision, !replacement.isEmpty {
+            if start < end {
+                for deletedSegment in touchedSegments {
+                    trackedRuns.append(
+                        TrackedRun(
+                            run: deletedSegment.run,
+                            revision: deletionRevision,
+                            isDeleted: true
+                        )
+                    )
+                }
+            }
             trackedRuns.append(
                 TrackedRun(
                     run: Run(text: replacement, properties: inheritedProperties),
                     revision: insertionRevision
                 )
             )
+        } else if !inserted, start < end {
+            for deletedSegment in touchedSegments {
+                trackedRuns.append(
+                    TrackedRun(
+                        run: deletedSegment.run,
+                        revision: deletionRevision,
+                        isDeleted: true
+                    )
+                )
+            }
         }
 
-        paragraph.trackedRuns = trackedRuns
+        let normalizedTrackedRuns = normalizedTrackedRunsForInlineEditing(trackedRuns)
+        paragraph.trackedRuns = normalizedTrackedRuns
+        paragraph.runs = mergeRuns(normalizedTrackedRuns.compactMap { trackedRun in
+            trackedRun.isDeleted ? nil : trackedRun.run
+        })
         paragraph = normalizeTrackedParagraph(paragraph)
         body.children[actualIndex] = .paragraph(paragraph)
     }
@@ -259,20 +281,13 @@ extension WordDocument {
         end: Int,
         format: RunProperties
     ) throws {
-        let paragraphIndices = body.children.enumerated().compactMap { (i, child) -> Int? in
-            if case .paragraph = child { return i }
-            return nil
-        }
-        guard paragraphIndex >= 0 && paragraphIndex < paragraphIndices.count else {
-            throw WordError.invalidIndex(paragraphIndex)
-        }
-
-        let actualIndex = paragraphIndices[paragraphIndex]
+        let actualIndex = try visibleParagraphStorageIndex(for: paragraphIndex)
         guard case .paragraph(var paragraph) = body.children[actualIndex] else {
             throw WordError.invalidIndex(paragraphIndex)
         }
 
-        let segments = splitVisibleSegments(for: paragraph, boundaries: [start, end])
+        let sourceTrackedRuns = paragraph.trackedRuns ?? paragraph.runs.map { TrackedRun(run: $0) }
+        let segments = splitEditableTrackedSegments(for: paragraph, boundaries: [start, end])
         let paragraphLength = segments.last?.end ?? 0
         guard start >= 0, end >= start, end <= paragraphLength else {
             throw WordError.invalidParameter("range", "Invalid range \(start)..<\(end)")
@@ -280,71 +295,100 @@ extension WordDocument {
         guard start < end else { return }
 
         let revision = makeRevision(type: .formatChange, paragraphIndex: paragraphIndex)
-        var updatedRuns: [Run] = []
+        let segmentsBySourceIndex = Dictionary(grouping: segments, by: \.sourceTrackedIndex)
+        var updatedTrackedRuns: [TrackedRun] = []
 
-        for segment in segments {
-            guard segment.start < end, segment.end > start else {
-                updatedRuns.append(segment.run)
+        for (sourceIndex, trackedRun) in sourceTrackedRuns.enumerated() {
+            if trackedRun.isDeleted {
+                updatedTrackedRuns.append(trackedRun)
                 continue
             }
 
-            var updatedRun = segment.run
-            let previous = RunPropertiesSnapshot(from: updatedRun.properties)
-            updatedRun.properties.merge(with: format)
-            updatedRun.properties.formatChange = RunFormatChange(revision: revision, previousProperties: previous)
-            updatedRuns.append(updatedRun)
-        }
-
-        paragraph.runs = mergeRuns(updatedRuns)
-        if let trackedRuns = paragraph.trackedRuns, trackedRuns.count == paragraph.runs.count {
-            paragraph.trackedRuns = zip(trackedRuns, paragraph.runs).map { tracked, run in
-                TrackedRun(run: run, revision: tracked.revision, isDeleted: tracked.isDeleted)
+            let sourceSegments = segmentsBySourceIndex[sourceIndex] ?? []
+            for segment in sourceSegments {
+                var updatedRun = segment.run
+                if segment.start < end, segment.end > start {
+                    let previous = RunPropertiesSnapshot(from: updatedRun.properties)
+                    updatedRun.properties.merge(with: format)
+                    updatedRun.properties.formatChange = RunFormatChange(
+                        revision: revision,
+                        previousProperties: previous
+                    )
+                }
+                updatedTrackedRuns.append(
+                    TrackedRun(
+                        run: updatedRun,
+                        revision: segment.revision,
+                        isDeleted: false
+                    )
+                )
             }
         }
+        paragraph.trackedRuns = updatedTrackedRuns
+        paragraph.runs = mergeRuns(updatedTrackedRuns.compactMap { trackedRun in
+            trackedRun.isDeleted ? nil : trackedRun.run
+        })
         body.children[actualIndex] = .paragraph(paragraph)
     }
 
-    private func splitVisibleSegments(for paragraph: Paragraph, boundaries: [Int]) -> [(run: Run, start: Int, end: Int)] {
-        var visibleRuns = paragraph.trackedRuns?.compactMap { $0.isDeleted ? nil : $0.run } ?? paragraph.runs
-        visibleRuns = visibleRuns.flatMap { run -> [Run] in
-            run.text.isEmpty ? [] : [run]
-        }
+    private func splitEditableTrackedSegments(for paragraph: Paragraph, boundaries: [Int]) -> [EditableTrackedSegment] {
+        var visibleSegments: [(sourceTrackedIndex: Int, run: Run, revision: Revision?)] =
+            (paragraph.trackedRuns ?? paragraph.runs.map { TrackedRun(run: $0) })
+            .enumerated()
+            .compactMap { index, trackedRun in
+                guard !trackedRun.isDeleted, !trackedRun.run.text.isEmpty else { return nil }
+                return (index, trackedRun.run, trackedRun.revision)
+            }
+
         for boundary in Array(Set(boundaries)).sorted() {
             var cursor = 0
-            for index in visibleRuns.indices {
-                let run = visibleRuns[index]
+            for index in visibleSegments.indices {
+                let segment = visibleSegments[index]
                 let start = cursor
-                let end = cursor + run.text.count
+                let end = cursor + segment.run.text.count
                 cursor = end
 
                 guard boundary > start, boundary < end else { continue }
 
-                let splitIndex = run.text.index(run.text.startIndex, offsetBy: boundary - start)
-                let leftText = String(run.text[..<splitIndex])
-                let rightText = String(run.text[splitIndex...])
-                let leftRun = Run(text: leftText, properties: run.properties)
-                let rightRun = Run(text: rightText, properties: run.properties)
-                visibleRuns.remove(at: index)
-                visibleRuns.insert(contentsOf: [leftRun, rightRun], at: index)
+                let splitIndex = segment.run.text.index(segment.run.text.startIndex, offsetBy: boundary - start)
+                let leftText = String(segment.run.text[..<splitIndex])
+                let rightText = String(segment.run.text[splitIndex...])
+                let leftRun = Run(text: leftText, properties: segment.run.properties)
+                let rightRun = Run(text: rightText, properties: segment.run.properties)
+                visibleSegments.remove(at: index)
+                visibleSegments.insert(
+                    contentsOf: [
+                        (segment.sourceTrackedIndex, leftRun, segment.revision),
+                        (segment.sourceTrackedIndex, rightRun, segment.revision),
+                    ],
+                    at: index
+                )
                 break
             }
         }
+
         var cursor = 0
-        return visibleRuns.map { run in
+        return visibleSegments.map { segment in
             let start = cursor
-            cursor += run.text.count
-            return (run, start, cursor)
+            cursor += segment.run.text.count
+            return EditableTrackedSegment(
+                sourceTrackedIndex: segment.sourceTrackedIndex,
+                run: segment.run,
+                revision: segment.revision,
+                start: start,
+                end: cursor
+            )
         }
     }
 
-    private func visibleText(in segments: [(run: Run, start: Int, end: Int)], from start: Int, to end: Int) -> String {
+    private func visibleText(in segments: [EditableTrackedSegment], from start: Int, to end: Int) -> String {
         segments.compactMap { segment in
             guard segment.start < end, segment.end > start else { return nil }
             return segment.run.text
         }.joined()
     }
 
-    private func inheritedRunProperties(in segments: [(run: Run, start: Int, end: Int)], start: Int, end: Int) -> RunProperties {
+    private func inheritedRunProperties(in segments: [EditableTrackedSegment], start: Int, end: Int) -> RunProperties {
         if start < end, let segment = segments.first(where: { start < $0.end && end > $0.start }) {
             return segment.run.properties
         }
@@ -377,6 +421,66 @@ extension WordDocument {
         return merged
     }
 
+    private func normalizedTrackedRunsForInlineEditing(_ trackedRuns: [TrackedRun]) -> [TrackedRun] {
+        var normalized: [TrackedRun] = []
+        var pendingWhitespace = ""
+        var index = 0
+
+        func isStandaloneWhitespace(_ trackedRun: TrackedRun) -> Bool {
+            !trackedRun.isDeleted
+                && trackedRun.revision == nil
+                && !trackedRun.run.text.isEmpty
+                && trackedRun.run.text.allSatisfy(\.isWhitespace)
+                && trackedRun.run.rawXML == nil
+                && trackedRun.run.properties.rawXML == nil
+                && trackedRun.run.drawing == nil
+        }
+
+        while index < trackedRuns.count {
+            let trackedRun = trackedRuns[index]
+            if isStandaloneWhitespace(trackedRun) {
+                pendingWhitespace += trackedRun.run.text
+                index += 1
+                continue
+            }
+
+            var adjusted = trackedRun
+            if !pendingWhitespace.isEmpty {
+                adjusted.run.text = pendingWhitespace + adjusted.run.text
+                if adjusted.isDeleted {
+                    normalized.append(adjusted)
+                    index += 1
+                    while index < trackedRuns.count {
+                        var follower = trackedRuns[index]
+                        follower.run.text = pendingWhitespace + follower.run.text
+                        normalized.append(follower)
+                        index += 1
+                        if !follower.isDeleted {
+                            break
+                        }
+                    }
+                    pendingWhitespace = ""
+                    continue
+                }
+                pendingWhitespace = ""
+            }
+
+            normalized.append(adjusted)
+            index += 1
+        }
+
+        if !pendingWhitespace.isEmpty {
+            if var last = normalized.last {
+                last.run.text += pendingWhitespace
+                normalized[normalized.count - 1] = last
+            } else {
+                normalized.append(TrackedRun(run: Run(text: pendingWhitespace)))
+            }
+        }
+
+        return normalized
+    }
+
     mutating func acceptNativeRevision(_ revision: Revision) {
         for index in body.children.indices {
             guard case .paragraph(var paragraph) = body.children[index] else { continue }
@@ -404,6 +508,10 @@ extension WordDocument {
                     updatedRuns.append(acceptedRun)
                 }
                 paragraph.trackedRuns = updatedRuns
+                if updatedRuns.isEmpty && paragraph.runs.isEmpty {
+                    body.children.remove(at: index)
+                    return
+                }
             }
 
             if paragraph.properties.formatChange?.id == revision.id {
@@ -449,6 +557,10 @@ extension WordDocument {
                     }
                 }
                 paragraph.trackedRuns = updatedRuns
+                if updatedRuns.isEmpty && paragraph.runs.isEmpty {
+                    body.children.remove(at: index)
+                    return
+                }
             }
 
             if let formatChange = paragraph.properties.formatChange, formatChange.id == revision.id {

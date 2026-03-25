@@ -148,4 +148,23 @@ final class InlineEditingTests: XCTestCase {
         XCTAssertEqual(runs.map(\.text), ["ab", "ef"])
         XCTAssertTrue(runs[0].properties.bold)
     }
+
+    func testTrackedReplaceTextRangeKeepsVisibleRunsInSyncForFollowUpEdits() throws {
+        var document = TestFixtures.makeDocument(paragraphs: [
+            TestFixtures.makeParagraph(runs: [
+                TestFixtures.makeRun("Hello world")
+            ])
+        ])
+        document.enableTrackChanges(author: "Test")
+
+        try document.replaceTextRange(at: 0, start: 6, end: 11, replacement: "teammates", replacementProperties: nil)
+
+        XCTAssertEqual(document.getParagraphs()[0].getText(), "Hello teammates")
+        XCTAssertEqual(document.getParagraphs()[0].runs.map(\.text).joined(), "Hello teammates")
+
+        try document.replaceTextRange(at: 0, start: 6, end: 15, replacement: "crew", replacementProperties: nil)
+
+        XCTAssertEqual(document.getParagraphs()[0].getText(), "Hello crew")
+        XCTAssertEqual(document.getParagraphs()[0].runs.map(\.text).joined(), "Hello crew")
+    }
 }

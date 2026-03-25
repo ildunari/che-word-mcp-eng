@@ -28,6 +28,7 @@ claude mcp add che-word-mcp -- npx -y che-word-mcp-kosta
 ## Requirements
 
 - **macOS 13.0+** (Ventura or later) — this is a native Swift binary
+- GitHub release asset `CheWordMCP` must exist for the matching version, because the npm package downloads that binary during `postinstall`
 
 ## What It Does
 
@@ -36,6 +37,7 @@ Create, read, edit, and export Word documents (.docx) directly from Claude or an
 **149 tools** covering: document management, content operations, formatting, range-aware inline editing, tables, styles, lists, page setup, headers/footers, images, export (text & markdown), hyperlinks, bookmarks, comments, track changes, footnotes, endnotes, field codes, and more.
 
 Comment replies use `parent_comment_id` + `text`, and tracked revisions can be listed or accepted/rejected either one at a time or all at once.
+`replace_text` remains exact-match for typographic variants in this release, so `-` does not match `–`, and straight quotes do not match curly quotes.
 
 ## Links
 

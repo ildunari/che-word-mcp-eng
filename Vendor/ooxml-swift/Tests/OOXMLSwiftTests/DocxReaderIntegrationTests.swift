@@ -78,6 +78,17 @@ final class DocxReaderIntegrationTests: XCTestCase {
         }
     }
 
+    func testGetParagraphsHidesTrackedDeletedParagraphShells() throws {
+        var doc = WordDocument()
+        doc.appendParagraph(Paragraph(text: "First"))
+        doc.appendParagraph(Paragraph(text: "Second"))
+        doc.enableTrackChanges(author: "Test")
+
+        try doc.deleteParagraph(at: 0)
+
+        XCTAssertEqual(doc.getParagraphs().map { $0.getText() }, ["Second"])
+    }
+
     // MARK: - Paragraph Properties
 
     func testReadParagraphAlignment() throws {

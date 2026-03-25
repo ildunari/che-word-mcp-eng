@@ -20,7 +20,7 @@ class WordMCPServer {
     init() async {
         self.server = Server(
             name: "che-word-mcp",
-            version: "1.19.1",
+            version: "1.19.2",
             capabilities: .init(tools: .init())
         )
         self.transport = StdioTransport()

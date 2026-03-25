@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.2] - 2026-03-25
+
+### Changed
+- `get_paragraphs` and paragraph-indexed editing now operate on visible paragraphs, so fully deleted tracked paragraph shells no longer surface as blank lines or skew later paragraph indices
+- range validation errors now report the visible paragraph length used for inline editing checks
+- release guidance now calls out the universal binary flow, the current npm package name (`che-word-mcp-kosta`), exact-match search behavior, GitHub asset upload, and fresh-install/npm validation steps
+
+### Fixed
+- `delete_paragraph` no longer leaves visible empty paragraph artifacts when track changes is enabled
+- repeated tracked `replace_text` / `replace_text_range` edits now keep visible runs synchronized, so later edits in the same open session use the current visible text length instead of stale pre-revision runs
+- accepting a tracked paragraph deletion now removes the paragraph cleanly instead of leaving an empty shell behind after revisions are applied
+
 ## [1.19.1] - 2026-03-24
 
 ### Added

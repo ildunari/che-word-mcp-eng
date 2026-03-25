@@ -17,6 +17,7 @@ Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.19.2 | 2026-03-25 | Hide fully deleted tracked paragraph shells, keep tracked replace-text edits aligned to visible text in the same session, and harden release/install guidance |
 | v1.19.1 | 2026-03-24 | Add run-highlight formatting control, including `highlight: "none"` / `"clear"` to remove existing highlight |
 | v1.19.0 | 2026-03-24 | Persist native Word track revisions across save/reopen, surface reply threading in `list_comments`, and add a real stdio smoke harness |
 | v1.18.0 | 2026-03-23 | Add range-aware inline editing, MCP tool metadata hardening, and expanded regression/integration coverage |
@@ -50,6 +51,7 @@ Download the latest release from [GitHub Releases](https://github.com/ildunari/c
 
 ```bash
 # Download and install
+mkdir -p ~/bin
 curl -L https://github.com/ildunari/che-word-mcp-eng/releases/latest/download/CheWordMCP -o ~/bin/CheWordMCP
 chmod +x ~/bin/CheWordMCP
 ```
@@ -65,11 +67,29 @@ chmod +x ~/bin/CheWordMCP
 git clone https://github.com/ildunari/che-word-mcp-eng.git
 cd che-word-mcp-eng
 swift build -c release
+mkdir -p ~/bin
+cp .build/release/CheWordMCP ~/bin/CheWordMCP
+chmod +x ~/bin/CheWordMCP
 ```
 
-The binary will be located at `.build/release/CheWordMCP`
+The binary will be located at `.build/release/CheWordMCP`. This local build matches your current machine architecture only; GitHub release assets should stay universal (`arm64` + `x86_64`).
+
+### Option 3: Install via npm
+
+The current npm package name is `che-word-mcp-kosta`.
+
+```bash
+npm install -g che-word-mcp-kosta
+```
+
+This package downloads the matching GitHub release asset named `CheWordMCP` during `postinstall`, so GitHub release assets must be published before or alongside the npm release. For release prep, validate the package locally first with `npm pack --dry-run --json ./npm`.
 
 ### Add to Claude Code
+
+Use the binary that matches how you installed the server:
+- Source build: `.build/release/CheWordMCP`
+- GitHub release / local release prep: `dist/release/CheWordMCP` or `~/bin/CheWordMCP`
+- npm install: `npx -y che-word-mcp-kosta`
 
 ```bash
 claude mcp add che-word-mcp /path/to/che-word-mcp-eng/.build/release/CheWordMCP
@@ -139,6 +159,9 @@ Precise editing workflow:
 3. `format_text_range` - Apply formatting to a range instead of reformatting the whole paragraph; supports `highlight` colors plus `highlight: "none"` to clear existing run highlight
 4. `format_text` / `update_paragraph` - Use only when paragraph-wide behavior is actually desired
 
+Paragraph-indexed tools now operate on visible paragraphs, so fully deleted tracked paragraph shells do not count toward later indices.
+`replace_text` and `search_text` remain exact-match for typographic variants in this release: `-` does not match `–`, `'` does not match `’`, and `"` does not match curly double quotes.
+
 Comments and tracked revisions:
 1. `list_comments` - Inspect existing comment IDs before replying or resolving
 2. `reply_to_comment` - Reply using `parent_comment_id` + `text` (optional `author`)
@@ -168,6 +191,33 @@ cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 
 - The MCP stdio transport used by this server is newline-delimited JSON-RPC, not `Content-Length` framed messages.
 - For a real binary smoke test, run `./scripts/stdio_smoke.swift` from the repo root after `swift build`.
+
+## Release Checklist
+
+Build one universal binary and reuse that exact file for both GitHub and MCPB:
+
+```bash
+swift build -c release --build-path .build-arm64 --arch arm64
+swift build -c release --build-path .build-x86_64 --arch x86_64
+mkdir -p dist/release ~/bin
+lipo -create \
+  .build-arm64/release/CheWordMCP \
+  .build-x86_64/release/CheWordMCP \
+  -output dist/release/CheWordMCP
+cp dist/release/CheWordMCP ~/bin/CheWordMCP
+cp dist/release/CheWordMCP mcpb/server/CheWordMCP
+lipo -archs dist/release/CheWordMCP
+cd mcpb && zip -r che-word-mcp.mcpb manifest.json README.md server
+```
+
+Upload both release assets explicitly, then verify the real user install path and npm package before publishing:
+
+```bash
+gh release upload v1.19.2 dist/release/CheWordMCP --clobber
+gh release upload v1.19.2 mcpb/che-word-mcp.mcpb --clobber
+./scripts/stdio_smoke.swift dist/release/CheWordMCP
+npm pack --dry-run --json ./npm
+```
 
 ## Available Tools (149 Total)
 

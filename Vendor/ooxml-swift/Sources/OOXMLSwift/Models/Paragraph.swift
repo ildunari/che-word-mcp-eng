@@ -44,6 +44,18 @@ public struct Paragraph: Equatable {
         }
         return text
     }
+
+    public var isFullyDeletedTrackedParagraph: Bool {
+        guard let trackedRuns, !trackedRuns.isEmpty else {
+            return false
+        }
+
+        if paragraphRevision?.type == .insertion {
+            return false
+        }
+
+        return trackedRuns.allSatisfy(\.isDeleted) && getText().isEmpty
+    }
 }
 
 // MARK: - Paragraph Properties

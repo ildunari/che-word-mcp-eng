@@ -8,7 +8,7 @@ enum InlineEditingError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidRange(let start, let end, let length):
-            return "Invalid text range start=\(start) end=\(end) for paragraph length \(length)"
+            return "Invalid text range start=\(start) end=\(end) for visible paragraph length \(length)"
         case .unsupportedParagraphContent(let reason):
             return "Inline editing is not supported for this paragraph: \(reason)"
         }
@@ -133,18 +133,7 @@ extension WordDocument {
     }
 
     private func paragraphStorageIndex(for paragraphIndex: Int) throws -> Int {
-        let paragraphIndices = body.children.enumerated().compactMap { index, child -> Int? in
-            if case .paragraph = child {
-                return index
-            }
-            return nil
-        }
-
-        guard paragraphIndex >= 0, paragraphIndex < paragraphIndices.count else {
-            throw WordError.invalidIndex(paragraphIndex)
-        }
-
-        return paragraphIndices[paragraphIndex]
+        try visibleParagraphStorageIndex(for: paragraphIndex)
     }
 
     private func validateEditableParagraph(_ paragraph: Paragraph, start: Int, end: Int) throws {
@@ -152,7 +141,10 @@ extension WordDocument {
             throw InlineEditingError.unsupportedParagraphContent("paragraph contains hyperlinks")
         }
 
-        let paragraphLength = paragraph.runs.reduce(into: 0) { partialResult, run in
+        let visibleRuns = paragraph.trackedRuns?.compactMap { trackedRun in
+            trackedRun.isDeleted ? nil : trackedRun.run
+        } ?? paragraph.runs
+        let paragraphLength = visibleRuns.reduce(into: 0) { partialResult, run in
             partialResult += run.text.count
         }
 
@@ -160,7 +152,14 @@ extension WordDocument {
             throw InlineEditingError.invalidRange(start: start, end: end, length: paragraphLength)
         }
 
-        for segment in segments(for: paragraph) where !segment.isTextOnly {
+        let visibleSegments = visibleRuns.enumerated().reduce(into: [InlineRunSegment]()) { partialResult, item in
+            let (index, run) = item
+            let startOffset = partialResult.last?.end ?? 0
+            let endOffset = startOffset + run.text.count
+            partialResult.append(InlineRunSegment(runIndex: index, start: startOffset, end: endOffset, run: run))
+        }
+
+        for segment in visibleSegments where !segment.isTextOnly {
             if start == end {
                 if start > segment.start, start < segment.end {
                     throw InlineEditingError.unsupportedParagraphContent("edit would split a non-text run")

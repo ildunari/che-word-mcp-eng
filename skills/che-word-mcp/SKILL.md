@@ -74,6 +74,12 @@ export_markdown(source_path: "/path/to/document.docx", path: "/path/to/output.md
 → Returns Markdown format
 ```
 
+### Installation Notes
+
+- GitHub release installs should create `~/bin` first if it does not already exist.
+- The current npm package name is `che-word-mcp-kosta`.
+- npm installs download the matching GitHub release asset `CheWordMCP` during `postinstall`, so GitHub release assets must already be available.
+
 ### Comments and Tracked Revisions
 
 ```text
@@ -100,6 +106,8 @@ export_markdown(source_path: "/path/to/document.docx", path: "/path/to/output.md
 - If `close_document` returns an unsaved-changes error, call `save_document` or ask the user whether it should be saved now.
 - Prefer `save_document(doc_id: "...")` after `open_document(...)` so the server can reuse the original path safely.
 - Use `open_document(..., autosave: true)` only when save-after-each-edit is explicitly desired.
+- Paragraph-indexed tools operate on visible paragraphs, so fully deleted tracked paragraph shells do not count toward later indices.
+- `replace_text` and `search_text` use exact character matching for punctuation variants in this release: `-` does not match `–`, `'` does not match `’`, and `"` does not match curly double quotes.
 
 ## Tool Categories
 
