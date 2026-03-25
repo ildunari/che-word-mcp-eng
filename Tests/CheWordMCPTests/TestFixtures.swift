@@ -8,6 +8,7 @@ enum TestFixtures {
         italic: Bool = false,
         underline: UnderlineType? = nil,
         color: String? = nil,
+        highlight: HighlightColor? = nil,
         rawXML: String? = nil,
         drawing: Drawing? = nil
     ) -> Run {
@@ -16,6 +17,7 @@ enum TestFixtures {
         properties.italic = italic
         properties.underline = underline
         properties.color = color
+        properties.highlight = highlight
         properties.rawXML = rawXML
 
         var run = Run(text: text, properties: properties)

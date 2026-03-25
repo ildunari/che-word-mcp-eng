@@ -35,6 +35,7 @@ public struct RunProperties: Equatable {
     public var textEffect: TextEffect?              // 文字效果
     public var rawXML: String?                      // 原始 XML（用於進階功能如 SDT）
     public var formatChange: RunFormatChange?
+    public var clearHighlight: Bool = false
 
     public init() {}
 
@@ -67,7 +68,11 @@ public struct RunProperties: Equatable {
         if let fontSize = other.fontSize { self.fontSize = fontSize }
         if let fontName = other.fontName { self.fontName = fontName }
         if let color = other.color { self.color = color }
-        if let highlight = other.highlight { self.highlight = highlight }
+        if other.clearHighlight {
+            self.highlight = nil
+        } else if let highlight = other.highlight {
+            self.highlight = highlight
+        }
         if let verticalAlign = other.verticalAlign { self.verticalAlign = verticalAlign }
         if let characterSpacing = other.characterSpacing { self.characterSpacing = characterSpacing }
         if let textEffect = other.textEffect { self.textEffect = textEffect }

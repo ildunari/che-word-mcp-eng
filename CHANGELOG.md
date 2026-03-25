@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.1] - 2026-03-24
+
+### Added
+- `format_text` and `format_text_range` now accept `highlight`, with `"none"` / `"clear"` support for explicitly removing existing run highlight
+- regression coverage for setting and clearing run highlight through inline formatting, handler-level validation, and tracked-change save/reopen behavior
+
+### Fixed
+- run-formatting merges now preserve explicit highlight clearing instead of silently keeping the old highlight
+- bundled README and skill docs now document highlight support and the `"none"` clearing contract
+
 ## [1.19.0] - 2026-03-24
 
 ### Added

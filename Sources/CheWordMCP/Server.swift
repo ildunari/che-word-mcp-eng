@@ -20,7 +20,7 @@ class WordMCPServer {
     init() async {
         self.server = Server(
             name: "che-word-mcp",
-            version: "1.19.0",
+            version: "1.19.1",
             capabilities: .init(tools: .init())
         )
         self.transport = StdioTransport()
@@ -569,6 +569,10 @@ class WordMCPServer {
                         "color": .object([
                             "type": .string("string"),
                             "description": .string("Text color (RGB hexadecimal, such as FF0000 means red)")
+                        ]),
+                        "highlight": .object([
+                            "type": .string("string"),
+                            "description": .string("Highlight color (yellow, green, cyan, magenta, blue, red, darkBlue, darkCyan, darkGreen, darkMagenta, darkRed, darkYellow, lightGray, darkGray, black, white) or 'none' to clear highlight")
                         ])
                     ]),
                     "required": .array([.string("doc_id"), .string("paragraph_index")])
@@ -619,6 +623,10 @@ class WordMCPServer {
                         "color": .object([
                             "type": .string("string"),
                             "description": .string("Text color (RGB hexadecimal, such as FF0000 means red)")
+                        ]),
+                        "highlight": .object([
+                            "type": .string("string"),
+                            "description": .string("Highlight color (yellow, green, cyan, magenta, blue, red, darkBlue, darkCyan, darkGreen, darkMagenta, darkRed, darkYellow, lightGray, darkGray, black, white) or 'none' to clear highlight")
                         ])
                     ]),
                     "required": .array([
@@ -4776,7 +4784,30 @@ class WordMCPServer {
 
     // MARK: - Formatting
 
-    private func runPropertiesFromArgs(_ args: [String: Value]) -> RunProperties {
+    private func parseHighlight(_ rawValue: String) throws -> HighlightColor? {
+        let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            throw WordError.invalidParameter("highlight", "highlight must not be empty")
+        }
+
+        if ["none", "clear"].contains(normalized.lowercased()) {
+            return nil
+        }
+
+        if let highlight = HighlightColor(rawValue: normalized) {
+            return highlight
+        }
+
+        let supported = [
+            "yellow", "green", "cyan", "magenta", "blue", "red",
+            "darkBlue", "darkCyan", "darkGreen", "darkMagenta",
+            "darkRed", "darkYellow", "lightGray", "darkGray",
+            "black", "white", "none"
+        ].joined(separator: ", ")
+        throw WordError.invalidParameter("highlight", "unsupported highlight '\(rawValue)'. Use one of: \(supported)")
+    }
+
+    private func runPropertiesFromArgs(_ args: [String: Value]) throws -> RunProperties {
         var format = RunProperties()
         if let bold = args["bold"]?.boolValue { format.bold = bold }
         if let italic = args["italic"]?.boolValue { format.italic = italic }
@@ -4784,6 +4815,13 @@ class WordMCPServer {
         if let fontSize = args["font_size"]?.intValue { format.fontSize = fontSize * 2 }
         if let fontName = args["font_name"]?.stringValue { format.fontName = fontName }
         if let color = args["color"]?.stringValue { format.color = color }
+        if let highlight = args["highlight"]?.stringValue {
+            if ["none", "clear"].contains(highlight.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) {
+                format.clearHighlight = true
+            } else {
+                format.highlight = try parseHighlight(highlight)
+            }
+        }
         return format
     }
 
@@ -4800,7 +4838,7 @@ class WordMCPServer {
 
         enforceTrackChangesIfNeeded(&doc, docId: docId)
 
-        let format = runPropertiesFromArgs(args)
+        let format = try runPropertiesFromArgs(args)
 
         try doc.formatParagraph(at: paragraphIndex, with: format)
         try await storeDocument(doc, for: docId)
@@ -4831,7 +4869,7 @@ class WordMCPServer {
             at: paragraphIndex,
             start: start,
             end: end,
-            format: runPropertiesFromArgs(args)
+            format: try runPropertiesFromArgs(args)
         )
         try await storeDocument(doc, for: docId)
 
@@ -4863,7 +4901,7 @@ class WordMCPServer {
         let replacementProperties: RunProperties? =
             ["bold", "italic", "underline", "font_size", "font_name", "color"]
             .contains { args[$0] != nil }
-            ? runPropertiesFromArgs(args)
+            ? try runPropertiesFromArgs(args)
             : nil
 
         try doc.replaceTextRange(

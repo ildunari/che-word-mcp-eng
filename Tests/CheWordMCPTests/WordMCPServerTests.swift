@@ -445,6 +445,143 @@ final class WordMCPServerTests: XCTestCase {
         XCTAssertEqual(runs[1].properties.color, "FF0000")
     }
 
+    func testFormatTextRangeToolCanSetHighlight() async throws {
+        let url = tempURL("format-range-highlight")
+        try writeDocument(text: "Hello world", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "highlight": .string("yellow")
+            ]
+        )
+
+        XCTAssertNil(formatResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertEqual(runs.map(\.text), ["Hello ", "world"])
+        XCTAssertNil(runs[0].properties.highlight)
+        XCTAssertEqual(runs[1].properties.highlight, .yellow)
+    }
+
+    func testFormatTextRangeToolCanClearHighlight() async throws {
+        let url = tempURL("format-range-clear-highlight")
+        let document = TestFixtures.makeDocument(paragraphs: [
+            TestFixtures.makeParagraph(runs: [
+                TestFixtures.makeRun("Hello "),
+                TestFixtures.makeRun("world", highlight: .yellow)
+            ])
+        ])
+        try writeDocument(document, to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "highlight": .string("none")
+            ]
+        )
+
+        XCTAssertNil(formatResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertEqual(runs.map(\.text), ["Hello ", "world"])
+        XCTAssertNil(runs[1].properties.highlight)
+    }
+
+    func testFormatTextCanClearHighlightAcrossParagraph() async throws {
+        let url = tempURL("format-paragraph-clear-highlight")
+        let document = TestFixtures.makeDocument(paragraphs: [
+            TestFixtures.makeParagraph(runs: [
+                TestFixtures.makeRun("Hello", highlight: .yellow),
+                TestFixtures.makeRun(" world", highlight: .yellow)
+            ])
+        ])
+        try writeDocument(document, to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "highlight": .string("none")
+            ]
+        )
+
+        XCTAssertNil(formatResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertTrue(runs.allSatisfy { $0.properties.highlight == nil })
+    }
+
+    func testFormatTextRangeRejectsUnsupportedHighlightValue() async throws {
+        let url = tempURL("format-range-bad-highlight")
+        try writeDocument(text: "Hello world", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "highlight": .string("purple")
+            ]
+        )
+
+        XCTAssertEqual(formatResult.isError, true)
+        XCTAssertTrue(resultText(formatResult).contains("unsupported highlight 'purple'"))
+    }
+
     func testReplyToCommentAcceptsCanonicalParameterNames() async {
         let server = await WordMCPServer()
         _ = await server.invokeToolForTesting(name: "create_document", arguments: ["doc_id": .string("doc")])
@@ -979,6 +1116,71 @@ final class WordMCPServerTests: XCTestCase {
         XCTAssertEqual(runs.map(\.text), ["Hello world"])
         XCTAssertFalse(runs[0].properties.bold)
         XCTAssertNil(runs[0].properties.color)
+    }
+
+    func testFormatTextRangeHighlightSetAndClearPersistsAcrossSaveReopen() async throws {
+        let url = tempURL("format-highlight-native-reopen")
+        let document = TestFixtures.makeDocument(paragraphs: [
+            TestFixtures.makeParagraph(runs: [
+                TestFixtures.makeRun("Hello "),
+                TestFixtures.makeRun("world", highlight: .yellow)
+            ])
+        ])
+        try writeDocument(document, to: url)
+
+        let firstServer = await WordMCPServer()
+        _ = await firstServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "highlight": .string("none")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "save_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "close_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let secondServer = await WordMCPServer()
+        _ = await secondServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("reopened"),
+                "autosave": .bool(true)
+            ]
+        )
+        let revisionsResult = await secondServer.invokeToolForTesting(
+            name: "get_revisions",
+            arguments: ["doc_id": .string("reopened")]
+        )
+        XCTAssertTrue(resultText(revisionsResult).contains("RPRCHANGE"))
+
+        let savedBeforeReject = try DocxReader.read(from: url)
+        XCTAssertNil(savedBeforeReject.getParagraphs()[0].runs[1].properties.highlight)
+
+        let rejectResult = await secondServer.invokeToolForTesting(
+            name: "reject_all_revisions",
+            arguments: ["doc_id": .string("reopened")]
+        )
+        XCTAssertNil(rejectResult.isError)
+
+        let savedAfterReject = try DocxReader.read(from: url)
+        XCTAssertEqual(savedAfterReject.getParagraphs()[0].runs[1].properties.highlight, .yellow)
     }
 
     func testExistingNativeRevisionsRemainVisibleAfterNewEditAndRejectAllRestoresBaseline() async throws {

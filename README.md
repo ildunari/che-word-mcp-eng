@@ -17,6 +17,7 @@ Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.19.1 | 2026-03-24 | Add run-highlight formatting control, including `highlight: "none"` / `"clear"` to remove existing highlight |
 | v1.19.0 | 2026-03-24 | Persist native Word track revisions across save/reopen, surface reply threading in `list_comments`, and add a real stdio smoke harness |
 | v1.18.0 | 2026-03-23 | Add range-aware inline editing, MCP tool metadata hardening, and expanded regression/integration coverage |
 | v1.17.0 | 2026-03-08 | Add `get_document_session_state` and stronger finalize-first workflow guidance |
@@ -135,7 +136,7 @@ Export options:
 Precise editing workflow:
 1. `get_paragraph_runs` - Inspect how a paragraph is split into formatted runs
 2. `replace_text_range` - Replace text in a character range without flattening unaffected runs
-3. `format_text_range` - Apply formatting to a range instead of reformatting the whole paragraph
+3. `format_text_range` - Apply formatting to a range instead of reformatting the whole paragraph; supports `highlight` colors plus `highlight: "none"` to clear existing run highlight
 4. `format_text` / `update_paragraph` - Use only when paragraph-wide behavior is actually desired
 
 Comments and tracked revisions:
@@ -199,8 +200,8 @@ cp -r /path/to/che-word-mcp-eng/skills/che-word-mcp .claude/skills/
 
 | Tool | Description |
 |------|-------------|
-| `format_text` | Apply formatting to every run in a paragraph |
-| `format_text_range` | Apply formatting to a character range within a paragraph |
+| `format_text` | Apply formatting to every run in a paragraph; supports run highlight colors and `highlight: "none"` to clear highlight |
+| `format_text_range` | Apply formatting to a character range within a paragraph; supports run highlight colors and `highlight: "none"` to clear highlight |
 | `set_paragraph_format` | Set paragraph layout formatting (alignment, spacing) |
 | `apply_style` | Apply built-in or custom styles |
 

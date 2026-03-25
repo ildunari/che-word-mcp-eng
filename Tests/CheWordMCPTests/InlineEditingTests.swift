@@ -54,6 +54,23 @@ final class InlineEditingTests: XCTestCase {
         XCTAssertEqual(runs[1].properties.color, "FF0000")
     }
 
+    func testFormatTextRangeCanClearExistingHighlight() throws {
+        var document = TestFixtures.makeDocument(paragraphs: [
+            TestFixtures.makeParagraph(runs: [
+                TestFixtures.makeRun("Hello "),
+                TestFixtures.makeRun("world", highlight: .yellow)
+            ])
+        ])
+        var format = RunProperties()
+        format.clearHighlight = true
+
+        try document.formatTextRange(at: 0, start: 6, end: 11, format: format)
+
+        let runs = document.getParagraphs()[0].runs
+        XCTAssertEqual(runs.map(\.text), ["Hello world"])
+        XCTAssertNil(runs[0].properties.highlight)
+    }
+
     func testReplaceTextRangeSupportsUnicodeCharacterOffsets() throws {
         var document = TestFixtures.makeDocument(paragraphs: [
             TestFixtures.makeParagraph(runs: [

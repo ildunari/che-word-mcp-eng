@@ -57,7 +57,8 @@ Use `che-word-mcp` when you need to:
 1. open_document(path: "/path/to/document.docx", doc_id: "report")
 
 2. update_paragraph(doc_id: "report", index: 0, text: "New content")
-   format_text(doc_id: "report", paragraph_index: 0, bold: true)
+   format_text(doc_id: "report", paragraph_index: 0, bold: true, highlight: "yellow")
+   format_text_range(doc_id: "report", paragraph_index: 0, start: 5, end: 12, highlight: "none")
    insert_comment(doc_id: "report", paragraph_index: 0, author: "Claude", text: "Review needed")
 
 3. finalize_document(doc_id: "report")
@@ -122,7 +123,8 @@ export_markdown(source_path: "/path/to/document.docx", path: "/path/to/output.md
 
 ### Formatting
 
-- `format_text` - Bold, italic, color, font
+- `format_text` - Bold, italic, color, font, and run highlight (`highlight: "none"` clears it)
+- `format_text_range` - Range-scoped formatting including run highlight (`highlight: "none"` clears it)
 - `set_paragraph_format` - Alignment, spacing
 - `apply_style` - Apply Word styles
 - `set_character_spacing` - Letter spacing

@@ -252,7 +252,11 @@ extension WordDocument {
         if let fontSize = override.fontSize { merged.fontSize = fontSize }
         if let fontName = override.fontName { merged.fontName = fontName }
         if let color = override.color { merged.color = color }
-        if let highlight = override.highlight { merged.highlight = highlight }
+        if override.clearHighlight {
+            merged.highlight = nil
+        } else if let highlight = override.highlight {
+            merged.highlight = highlight
+        }
         if let verticalAlign = override.verticalAlign { merged.verticalAlign = verticalAlign }
         if let characterSpacing = override.characterSpacing { merged.characterSpacing = characterSpacing }
         if let textEffect = override.textEffect { merged.textEffect = textEffect }
