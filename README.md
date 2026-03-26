@@ -157,7 +157,7 @@ Export options:
 Precise editing workflow:
 1. `get_paragraph_runs` - Inspect how a paragraph is split into formatted runs
 2. `replace_text_range` - Replace text in a character range without flattening unaffected runs
-3. `format_text_range` - Apply formatting to a range instead of reformatting the whole paragraph; supports `highlight`, `strikethrough`, `vertical_align`, `small_caps`, `all_caps`, and `underline_style` (`underline: true` still maps to single underline)
+3. `format_text_range` - Apply formatting to a range instead of reformatting the whole paragraph; supports `highlight`, `strikethrough`, `vertical_align`, `small_caps`, `all_caps`, and `underline_style` (`underline: true` still maps to single underline, `false` clears; the new boolean caps/strikethrough fields also clear on `false`)
 4. `format_text` / `update_paragraph` - Use only when paragraph-wide behavior is actually desired
 
 Valid `highlight` values: `yellow`, `green`, `cyan`, `magenta`, `blue`, `red`, `darkBlue`, `darkCyan`, `darkGreen`, `darkMagenta`, `darkRed`, `darkYellow`, `lightGray`, `darkGray`, `black`, `white`, plus `none` / `clear` to remove highlight.
@@ -252,8 +252,8 @@ npm pack --dry-run --json ./npm
 
 | Tool | Description |
 |------|-------------|
-| `format_text` | Apply run formatting across a paragraph, including highlight, strikethrough, vertical alignment, caps, and explicit underline styles |
-| `format_text_range` | Apply run formatting to a character range, including highlight, strikethrough, vertical alignment, caps, and explicit underline styles |
+| `format_text` | Apply or clear run formatting across a paragraph, including highlight, strikethrough, vertical alignment, caps, and explicit underline styles |
+| `format_text_range` | Apply or clear run formatting on a character range, including highlight, strikethrough, vertical alignment, caps, and explicit underline styles |
 | `set_paragraph_format` | Set paragraph layout formatting (alignment, spacing) |
 | `apply_style` | Apply built-in or custom styles |
 

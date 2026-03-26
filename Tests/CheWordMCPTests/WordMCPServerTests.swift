@@ -699,6 +699,87 @@ final class WordMCPServerTests: XCTestCase {
         XCTAssertTrue(saved.getParagraphs()[0].runs.allSatisfy { $0.properties.underline == nil })
     }
 
+    func testFormatTextRangeSupportsFalseToClearRichBooleanFormatting() async throws {
+        let url = tempURL("format-range-clear-rich-bools")
+        let document = TestFixtures.makeDocument(paragraphs: [
+            TestFixtures.makeParagraph(runs: [
+                TestFixtures.makeRun("Hello "),
+                TestFixtures.makeRun("world", strikethrough: true, smallCaps: true, allCaps: true)
+            ])
+        ])
+        try writeDocument(document, to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "strikethrough": .bool(false),
+                "small_caps": .bool(false),
+                "all_caps": .bool(false)
+            ]
+        )
+
+        XCTAssertNil(formatResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertFalse(runs[1].properties.strikethrough)
+        XCTAssertFalse(runs[1].properties.smallCaps)
+        XCTAssertFalse(runs[1].properties.allCaps)
+    }
+
+    func testFormatTextSupportsFalseToClearRichBooleanFormattingAcrossParagraph() async throws {
+        let url = tempURL("format-paragraph-clear-rich-bools")
+        let document = TestFixtures.makeDocument(paragraphs: [
+            TestFixtures.makeParagraph(runs: [
+                TestFixtures.makeRun("Hello", strikethrough: true, smallCaps: true, allCaps: true),
+                TestFixtures.makeRun(" world", strikethrough: true, smallCaps: true, allCaps: true)
+            ])
+        ])
+        try writeDocument(document, to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "strikethrough": .bool(false),
+                "small_caps": .bool(false),
+                "all_caps": .bool(false)
+            ]
+        )
+
+        XCTAssertNil(formatResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        XCTAssertTrue(saved.getParagraphs()[0].runs.allSatisfy { !$0.properties.strikethrough })
+        XCTAssertTrue(saved.getParagraphs()[0].runs.allSatisfy { !$0.properties.smallCaps })
+        XCTAssertTrue(saved.getParagraphs()[0].runs.allSatisfy { !$0.properties.allCaps })
+    }
+
     func testSearchByFormattingSupportsRichRunFilters() async {
         let server = await WordMCPServer()
         _ = await server.invokeToolForTesting(name: "create_document", arguments: ["doc_id": .string("doc")])

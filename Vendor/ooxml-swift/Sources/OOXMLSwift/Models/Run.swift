@@ -27,8 +27,11 @@ public struct RunProperties: Equatable {
     public var underline: UnderlineType?
     public var clearUnderline: Bool = false
     public var strikethrough: Bool = false
+    public var clearStrikethrough: Bool = false
     public var smallCaps: Bool = false
+    public var clearSmallCaps: Bool = false
     public var allCaps: Bool = false
+    public var clearAllCaps: Bool = false
     public var fontSize: Int?              // 半點 (24 = 12pt)
     public var fontName: String?
     public var color: String?              // RGB hex (e.g., "FF0000")
@@ -71,9 +74,21 @@ public struct RunProperties: Equatable {
         } else if let underline = other.underline {
             self.underline = underline
         }
-        if other.strikethrough { self.strikethrough = true }
-        if other.smallCaps { self.smallCaps = true }
-        if other.allCaps { self.allCaps = true }
+        if other.clearStrikethrough {
+            self.strikethrough = false
+        } else if other.strikethrough {
+            self.strikethrough = true
+        }
+        if other.clearSmallCaps {
+            self.smallCaps = false
+        } else if other.smallCaps {
+            self.smallCaps = true
+        }
+        if other.clearAllCaps {
+            self.allCaps = false
+        } else if other.allCaps {
+            self.allCaps = true
+        }
         if let fontSize = other.fontSize { self.fontSize = fontSize }
         if let fontName = other.fontName { self.fontName = fontName }
         if let color = other.color { self.color = color }

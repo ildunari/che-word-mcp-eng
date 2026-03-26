@@ -131,8 +131,8 @@ export_markdown(source_path: "/path/to/document.docx", path: "/path/to/output.md
 
 ### Formatting
 
-- `format_text` - Paragraph-wide run formatting: bold, italic, color, highlight, strikethrough, superscript/subscript, caps, and underline styles
-- `format_text_range` - Range-scoped run formatting: bold, italic, color, highlight, strikethrough, superscript/subscript, caps, and underline styles
+- `format_text` - Paragraph-wide run formatting: bold, italic, color, highlight, strikethrough, superscript/subscript, caps, and underline styles; `false` clears the underline/strikethrough/caps boolean toggles
+- `format_text_range` - Range-scoped run formatting: bold, italic, color, highlight, strikethrough, superscript/subscript, caps, and underline styles; `false` clears the underline/strikethrough/caps boolean toggles
 - Valid `highlight` values: `yellow`, `green`, `cyan`, `magenta`, `blue`, `red`, `darkBlue`, `darkCyan`, `darkGreen`, `darkMagenta`, `darkRed`, `darkYellow`, `lightGray`, `darkGray`, `black`, `white`, plus `none` / `clear`
 - `set_paragraph_format` - Alignment, spacing
 - `apply_style` - Apply Word styles

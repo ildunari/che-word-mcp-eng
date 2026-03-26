@@ -564,7 +564,7 @@ class WordMCPServer {
                         ]),
                         "strikethrough": .object([
                             "type": .string("boolean"),
-                            "description": .string("Strikethrough")
+                            "description": .string("Strikethrough toggle. true = apply, false = clear")
                         ]),
                         "vertical_align": .object([
                             "type": .string("string"),
@@ -572,11 +572,11 @@ class WordMCPServer {
                         ]),
                         "small_caps": .object([
                             "type": .string("boolean"),
-                            "description": .string("Small caps")
+                            "description": .string("Small caps toggle. true = apply, false = clear")
                         ]),
                         "all_caps": .object([
                             "type": .string("boolean"),
-                            "description": .string("All caps")
+                            "description": .string("All caps toggle. true = apply, false = clear")
                         ]),
                         "font_size": .object([
                             "type": .string("integer"),
@@ -638,7 +638,7 @@ class WordMCPServer {
                         ]),
                         "strikethrough": .object([
                             "type": .string("boolean"),
-                            "description": .string("Strikethrough")
+                            "description": .string("Strikethrough toggle. true = apply, false = clear")
                         ]),
                         "vertical_align": .object([
                             "type": .string("string"),
@@ -646,11 +646,11 @@ class WordMCPServer {
                         ]),
                         "small_caps": .object([
                             "type": .string("boolean"),
-                            "description": .string("Small caps")
+                            "description": .string("Small caps toggle. true = apply, false = clear")
                         ]),
                         "all_caps": .object([
                             "type": .string("boolean"),
-                            "description": .string("All caps")
+                            "description": .string("All caps toggle. true = apply, false = clear")
                         ]),
                         "font_size": .object([
                             "type": .string("integer"),
@@ -4917,12 +4917,30 @@ class WordMCPServer {
                 format.underline = nil
             }
         }
-        if let strikethrough = args["strikethrough"]?.boolValue { format.strikethrough = strikethrough }
+        if let strikethrough = args["strikethrough"]?.boolValue {
+            if strikethrough {
+                format.strikethrough = true
+            } else {
+                format.clearStrikethrough = true
+            }
+        }
         if let verticalAlign = args["vertical_align"]?.stringValue {
             format.verticalAlign = try parseVerticalAlign(verticalAlign)
         }
-        if let smallCaps = args["small_caps"]?.boolValue { format.smallCaps = smallCaps }
-        if let allCaps = args["all_caps"]?.boolValue { format.allCaps = allCaps }
+        if let smallCaps = args["small_caps"]?.boolValue {
+            if smallCaps {
+                format.smallCaps = true
+            } else {
+                format.clearSmallCaps = true
+            }
+        }
+        if let allCaps = args["all_caps"]?.boolValue {
+            if allCaps {
+                format.allCaps = true
+            } else {
+                format.clearAllCaps = true
+            }
+        }
         if let fontSize = args["font_size"]?.intValue { format.fontSize = fontSize * 2 }
         if let fontName = args["font_name"]?.stringValue { format.fontName = fontName }
         if let color = args["color"]?.stringValue { format.color = color }

@@ -168,15 +168,31 @@ try require(closeAfterReject.contains("Closed document"), "close_document after 
 
 let reopen = try client.call(id: 15, name: "open_document", arguments: ["path": docPath, "doc_id": "accept", "autosave": true])
 let secondUpdate = try client.call(id: 16, name: "update_paragraph", arguments: ["doc_id": "accept", "index": 0, "text": "Accepted by stdio smoke harness"])
-let acceptAll = try client.call(id: 17, name: "accept_all_revisions", arguments: ["doc_id": "accept"])
-let save = try client.call(id: 18, name: "save_document", arguments: ["doc_id": "accept"])
-let comments = try client.call(id: 19, name: "list_comments", arguments: ["doc_id": "accept"])
-let close = try client.call(id: 20, name: "close_document", arguments: ["doc_id": "accept"])
+let richFormat = try client.call(id: 17, name: "format_text_range", arguments: [
+    "doc_id": "accept",
+    "paragraph_index": 0,
+    "start": 0,
+    "end": 8,
+    "underline_style": "wave",
+    "vertical_align": "superscript",
+    "small_caps": true
+])
+let richRuns = try client.call(id: 18, name: "get_paragraph_runs", arguments: ["doc_id": "accept", "paragraph_index": 0])
+let acceptAll = try client.call(id: 19, name: "accept_all_revisions", arguments: ["doc_id": "accept"])
+let save = try client.call(id: 20, name: "save_document", arguments: ["doc_id": "accept"])
+let exportedText = try client.call(id: 21, name: "get_text", arguments: ["source_path": docPath])
+let comments = try client.call(id: 22, name: "list_comments", arguments: ["doc_id": "accept"])
+let close = try client.call(id: 23, name: "close_document", arguments: ["doc_id": "accept"])
 
 try require(reopen.contains("Opened document"), "second open_document did not succeed")
 try require(secondUpdate.contains("Updated paragraph"), "second update_paragraph did not succeed")
+try require(richFormat.contains("Applied formatting"), "format_text_range rich-format smoke step did not succeed")
+try require(richRuns.contains("underline:wave"), "get_paragraph_runs did not report underline:wave")
+try require(richRuns.contains("verticalAlign:superscript"), "get_paragraph_runs did not report verticalAlign:superscript")
+try require(richRuns.contains("smallCaps"), "get_paragraph_runs did not report smallCaps")
 try require(acceptAll.contains("Accepted"), "accept_all_revisions did not succeed")
 try require(save.contains("Saved document"), "save_document did not succeed")
+try require(exportedText.contains("Accepted by stdio smoke harness"), "get_text did not report the accepted paragraph text")
 try require(comments.contains("reply to 1"), "list_comments did not expose reply threading")
 try require(close.contains("Closed document"), "final close_document did not succeed")
 
@@ -185,7 +201,11 @@ let settingsXML = try run(["/usr/bin/unzip", "-p", docPath, "word/settings.xml"]
 let commentsXML = try run(["/usr/bin/unzip", "-p", docPath, "word/comments.xml"])
 let commentsExtendedXML = try run(["/usr/bin/unzip", "-p", docPath, "word/commentsExtended.xml"])
 
-try require(documentXML.contains("Accepted by stdio smoke harness"), "document.xml does not contain accepted text")
+try require(documentXML.contains("Accepted"), "document.xml is missing the formatted accepted text run")
+try require(documentXML.contains("by stdio smoke harness"), "document.xml is missing the trailing accepted text run")
+try require(documentXML.contains("<w:u w:val=\"wave\"/>"), "document.xml is missing wave underline markup from rich-format smoke step")
+try require(documentXML.contains("<w:vertAlign w:val=\"superscript\"/>"), "document.xml is missing verticalAlign markup from rich-format smoke step")
+try require(documentXML.contains("<w:smallCaps/>"), "document.xml is missing smallCaps markup from rich-format smoke step")
 try require(settingsXML.contains("trackRevisions"), "settings.xml is missing w:trackRevisions")
 try require(commentsXML.contains("Reply from harness"), "comments.xml is missing the reply text")
 try require(commentsExtendedXML.contains("paraIdParent"), "commentsExtended.xml is missing reply threading metadata")
