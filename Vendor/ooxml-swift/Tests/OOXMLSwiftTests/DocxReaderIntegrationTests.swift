@@ -254,6 +254,25 @@ final class DocxReaderIntegrationTests: XCTestCase {
         }
     }
 
+    func testReadSmallCapsAndAllCaps() throws {
+        var doc = WordDocument()
+        var props = RunProperties()
+        props.smallCaps = true
+        props.allCaps = true
+        doc.body.children = [.paragraph(Paragraph(runs: [
+            Run(text: "Caps", properties: props)
+        ]))]
+
+        let result = try roundTrip(doc)
+
+        if case .paragraph(let para) = result.body.children[0] {
+            XCTAssertTrue(para.runs[0].properties.smallCaps)
+            XCTAssertTrue(para.runs[0].properties.allCaps)
+        } else {
+            XCTFail("Expected paragraph")
+        }
+    }
+
     func testReadFontAndSize() throws {
         var doc = WordDocument()
         var props = RunProperties()

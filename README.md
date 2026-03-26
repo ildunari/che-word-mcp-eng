@@ -17,6 +17,7 @@ Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.20.0 | 2026-03-25 | Add rich run-format controls for strikethrough, superscript/subscript, caps, underline styles, and richer formatting search filters |
 | v1.19.2 | 2026-03-25 | Hide fully deleted tracked paragraph shells, keep tracked replace-text edits aligned to visible text in the same session, and harden release/install guidance |
 | v1.19.1 | 2026-03-24 | Add run-highlight formatting control, including `highlight: "none"` / `"clear"` to remove existing highlight |
 | v1.19.0 | 2026-03-24 | Persist native Word track revisions across save/reopen, surface reply threading in `list_comments`, and add a real stdio smoke harness |
@@ -156,9 +157,10 @@ Export options:
 Precise editing workflow:
 1. `get_paragraph_runs` - Inspect how a paragraph is split into formatted runs
 2. `replace_text_range` - Replace text in a character range without flattening unaffected runs
-3. `format_text_range` - Apply formatting to a range instead of reformatting the whole paragraph; supports `highlight` colors plus `highlight: "none"` to clear existing run highlight
+3. `format_text_range` - Apply formatting to a range instead of reformatting the whole paragraph; supports `highlight`, `strikethrough`, `vertical_align`, `small_caps`, `all_caps`, and `underline_style` (`underline: true` still maps to single underline)
 4. `format_text` / `update_paragraph` - Use only when paragraph-wide behavior is actually desired
 
+Valid `highlight` values: `yellow`, `green`, `cyan`, `magenta`, `blue`, `red`, `darkBlue`, `darkCyan`, `darkGreen`, `darkMagenta`, `darkRed`, `darkYellow`, `lightGray`, `darkGray`, `black`, `white`, plus `none` / `clear` to remove highlight.
 Paragraph-indexed tools now operate on visible paragraphs, so fully deleted tracked paragraph shells do not count toward later indices.
 `replace_text` and `search_text` remain exact-match for typographic variants in this release: `-` does not match `–`, `'` does not match `’`, and `"` does not match curly double quotes.
 
@@ -213,8 +215,8 @@ cd mcpb && zip -r che-word-mcp.mcpb manifest.json README.md server
 Upload both release assets explicitly, then verify the real user install path and npm package before publishing:
 
 ```bash
-gh release upload v1.19.2 dist/release/CheWordMCP --clobber
-gh release upload v1.19.2 mcpb/che-word-mcp.mcpb --clobber
+gh release upload v1.20.0 dist/release/CheWordMCP --clobber
+gh release upload v1.20.0 mcpb/che-word-mcp.mcpb --clobber
 ./scripts/stdio_smoke.swift dist/release/CheWordMCP
 npm pack --dry-run --json ./npm
 ```
@@ -250,8 +252,8 @@ npm pack --dry-run --json ./npm
 
 | Tool | Description |
 |------|-------------|
-| `format_text` | Apply formatting to every run in a paragraph; supports run highlight colors and `highlight: "none"` to clear highlight |
-| `format_text_range` | Apply formatting to a character range within a paragraph; supports run highlight colors and `highlight: "none"` to clear highlight |
+| `format_text` | Apply run formatting across a paragraph, including highlight, strikethrough, vertical alignment, caps, and explicit underline styles |
+| `format_text_range` | Apply run formatting to a character range, including highlight, strikethrough, vertical alignment, caps, and explicit underline styles |
 | `set_paragraph_format` | Set paragraph layout formatting (alignment, spacing) |
 | `apply_style` | Apply built-in or custom styles |
 

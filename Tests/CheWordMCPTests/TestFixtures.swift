@@ -7,6 +7,10 @@ enum TestFixtures {
         bold: Bool = false,
         italic: Bool = false,
         underline: UnderlineType? = nil,
+        strikethrough: Bool = false,
+        smallCaps: Bool = false,
+        allCaps: Bool = false,
+        verticalAlign: VerticalAlign? = nil,
         color: String? = nil,
         highlight: HighlightColor? = nil,
         rawXML: String? = nil,
@@ -16,6 +20,10 @@ enum TestFixtures {
         properties.bold = bold
         properties.italic = italic
         properties.underline = underline
+        properties.strikethrough = strikethrough
+        properties.smallCaps = smallCaps
+        properties.allCaps = allCaps
+        properties.verticalAlign = verticalAlign
         properties.color = color
         properties.highlight = highlight
         properties.rawXML = rawXML

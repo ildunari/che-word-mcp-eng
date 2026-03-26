@@ -265,6 +265,8 @@ extension RunProperties {
         if bold == true { xml += "<w:b/>" }
         if italic == true { xml += "<w:i/>" }
         if let underline = underline { xml += "<w:u w:val=\"\(underline.rawValue)\"/>" }
+        if smallCaps { xml += "<w:smallCaps/>" }
+        if allCaps { xml += "<w:caps/>" }
         if let color = color { xml += "<w:color w:val=\"\(color)\"/>" }
         if let fontSize = fontSize { xml += "<w:sz w:val=\"\(fontSize * 2)\"/>" }
         if let fontName = fontName {
@@ -361,6 +363,8 @@ public struct RunPropertiesSnapshot: Equatable {
     public var italic: Bool = false
     public var underline: UnderlineType?
     public var strikethrough: Bool = false
+    public var smallCaps: Bool = false
+    public var allCaps: Bool = false
     public var fontSize: Int?
     public var fontName: String?
     public var color: String?
@@ -374,6 +378,8 @@ public struct RunPropertiesSnapshot: Equatable {
         self.italic = properties.italic
         self.underline = properties.underline
         self.strikethrough = properties.strikethrough
+        self.smallCaps = properties.smallCaps
+        self.allCaps = properties.allCaps
         self.fontSize = properties.fontSize
         self.fontName = properties.fontName
         self.color = properties.color
@@ -388,6 +394,8 @@ public struct RunPropertiesSnapshot: Equatable {
         properties.italic = italic
         properties.underline = underline
         properties.strikethrough = strikethrough
+        properties.smallCaps = smallCaps
+        properties.allCaps = allCaps
         properties.fontSize = fontSize
         properties.fontName = fontName
         properties.color = color
@@ -403,6 +411,8 @@ public struct RunPropertiesSnapshot: Equatable {
         if italic { xml += "<w:i/>" }
         if let underline { xml += "<w:u w:val=\"\(underline.rawValue)\"/>" }
         if strikethrough { xml += "<w:strike/>" }
+        if smallCaps { xml += "<w:smallCaps/>" }
+        if allCaps { xml += "<w:caps/>" }
         if let fontSize {
             xml += "<w:sz w:val=\"\(fontSize)\"/>"
             xml += "<w:szCs w:val=\"\(fontSize)\"/>"

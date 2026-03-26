@@ -37,6 +37,8 @@ Create, read, edit, and export Word documents (.docx) directly from Claude or an
 **149 tools** covering: document management, content operations, formatting, range-aware inline editing, tables, styles, lists, page setup, headers/footers, images, export (text & markdown), hyperlinks, bookmarks, comments, track changes, footnotes, endnotes, field codes, and more.
 
 Comment replies use `parent_comment_id` + `text`, and tracked revisions can be listed or accepted/rejected either one at a time or all at once.
+`format_text` and `format_text_range` support highlight clearing plus rich run formatting like `strikethrough`, `vertical_align`, `small_caps`, `all_caps`, and `underline_style`.
+`search_by_formatting` can filter underline presence/style, strikethrough, vertical alignment, and caps in addition to bold/italic/color/highlight.
 `replace_text` remains exact-match for typographic variants in this release, so `-` does not match `–`, and straight quotes do not match curly quotes.
 
 ## Links

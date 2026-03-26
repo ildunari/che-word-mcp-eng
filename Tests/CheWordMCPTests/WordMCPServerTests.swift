@@ -554,6 +554,334 @@ final class WordMCPServerTests: XCTestCase {
         XCTAssertTrue(runs.allSatisfy { $0.properties.highlight == nil })
     }
 
+    func testFormatTextRangeSupportsRichRunFormatting() async throws {
+        let url = tempURL("format-range-rich-run")
+        try writeDocument(text: "Hello world", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "strikethrough": .bool(true),
+                "vertical_align": .string("superscript"),
+                "small_caps": .bool(true),
+                "all_caps": .bool(true),
+                "underline_style": .string("double")
+            ]
+        )
+
+        XCTAssertNil(formatResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertEqual(runs.map(\.text), ["Hello ", "world"])
+        XCTAssertTrue(runs[1].properties.strikethrough)
+        XCTAssertEqual(runs[1].properties.verticalAlign, .superscript)
+        XCTAssertTrue(runs[1].properties.smallCaps)
+        XCTAssertTrue(runs[1].properties.allCaps)
+        XCTAssertEqual(runs[1].properties.underline, .double)
+    }
+
+    func testFormatTextRangeSupportsLegacyUnderlineBoolean() async throws {
+        let url = tempURL("format-range-legacy-underline")
+        try writeDocument(text: "Hello world", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "underline": .bool(true)
+            ]
+        )
+
+        XCTAssertNil(formatResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        XCTAssertEqual(saved.getParagraphs()[0].runs[1].properties.underline, .single)
+    }
+
+    func testFormatTextSupportsRichParagraphFormatting() async throws {
+        let url = tempURL("format-paragraph-rich-run")
+        try writeDocument(text: "Hello world", to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "strikethrough": .bool(true),
+                "vertical_align": .string("subscript"),
+                "small_caps": .bool(true),
+                "all_caps": .bool(true),
+                "underline_style": .string("dotted")
+            ]
+        )
+
+        XCTAssertNil(formatResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertTrue(runs.allSatisfy(\.properties.strikethrough))
+        XCTAssertTrue(runs.allSatisfy { $0.properties.verticalAlign == .subscript })
+        XCTAssertTrue(runs.allSatisfy(\.properties.smallCaps))
+        XCTAssertTrue(runs.allSatisfy(\.properties.allCaps))
+        XCTAssertTrue(runs.allSatisfy { $0.properties.underline == .dotted })
+    }
+
+    func testFormatTextSupportsLegacyUnderlineFalseToClear() async throws {
+        let url = tempURL("format-paragraph-clear-underline")
+        let document = TestFixtures.makeDocument(paragraphs: [
+            TestFixtures.makeParagraph(runs: [
+                TestFixtures.makeRun("Hello", underline: .single),
+                TestFixtures.makeRun(" world", underline: .single)
+            ])
+        ])
+        try writeDocument(document, to: url)
+
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let formatResult = await server.invokeToolForTesting(
+            name: "format_text",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "underline": .bool(false)
+            ]
+        )
+
+        XCTAssertNil(formatResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        XCTAssertTrue(saved.getParagraphs()[0].runs.allSatisfy { $0.properties.underline == nil })
+    }
+
+    func testSearchByFormattingSupportsRichRunFilters() async {
+        let server = await WordMCPServer()
+        _ = await server.invokeToolForTesting(name: "create_document", arguments: ["doc_id": .string("doc")])
+        _ = await server.invokeToolForTesting(
+            name: "insert_paragraph",
+            arguments: ["doc_id": .string("doc"), "text": .string("Hello world")]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(0),
+                "end": .int(5),
+                "underline_style": .string("wave"),
+                "vertical_align": .string("superscript"),
+                "small_caps": .bool(true)
+            ]
+        )
+        _ = await server.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "strikethrough": .bool(true),
+                "all_caps": .bool(true)
+            ]
+        )
+
+        let underlineResult = await server.invokeToolForTesting(
+            name: "search_by_formatting",
+            arguments: [
+                "doc_id": .string("doc"),
+                "underline": .bool(true),
+                "underline_style": .string("wave"),
+                "vertical_align": .string("superscript"),
+                "small_caps": .bool(true)
+            ]
+        )
+        let strikeResult = await server.invokeToolForTesting(
+            name: "search_by_formatting",
+            arguments: [
+                "doc_id": .string("doc"),
+                "strikethrough": .bool(true),
+                "all_caps": .bool(true)
+            ]
+        )
+
+        XCTAssertTrue(resultText(underlineResult).contains("Hello"))
+        XCTAssertTrue(resultText(underlineResult).contains("underline:wave"))
+        XCTAssertTrue(resultText(underlineResult).contains("verticalAlign:superscript"))
+        XCTAssertTrue(resultText(underlineResult).contains("smallCaps"))
+        XCTAssertTrue(resultText(strikeResult).contains("world"))
+        XCTAssertTrue(resultText(strikeResult).contains("strikethrough"))
+        XCTAssertTrue(resultText(strikeResult).contains("allCaps"))
+    }
+
+    func testRichFormattingRevisionsPersistAfterReopenAndRejectAllRestoresOriginalFormatting() async throws {
+        let url = tempURL("rich-format-reject-after-reopen")
+        try writeDocument(text: "Hello world", to: url)
+
+        let firstServer = await WordMCPServer()
+        _ = await firstServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "strikethrough": .bool(true),
+                "vertical_align": .string("superscript"),
+                "small_caps": .bool(true),
+                "all_caps": .bool(true),
+                "underline_style": .string("double")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "save_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "close_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let secondServer = await WordMCPServer()
+        _ = await secondServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("reopened"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let rejectResult = await secondServer.invokeToolForTesting(
+            name: "reject_all_revisions",
+            arguments: ["doc_id": .string("reopened")]
+        )
+
+        XCTAssertNil(rejectResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertEqual(runs.map(\.text).joined(), "Hello world")
+        XCTAssertTrue(runs.allSatisfy { !$0.properties.strikethrough })
+        XCTAssertTrue(runs.allSatisfy { $0.properties.verticalAlign == nil })
+        XCTAssertTrue(runs.allSatisfy { !$0.properties.smallCaps })
+        XCTAssertTrue(runs.allSatisfy { !$0.properties.allCaps })
+        XCTAssertTrue(runs.allSatisfy { $0.properties.underline == nil })
+    }
+
+    func testRichFormattingRevisionsPersistAfterReopenAndAcceptAllKeepsFormatting() async throws {
+        let url = tempURL("rich-format-accept-after-reopen")
+        try writeDocument(text: "Hello world", to: url)
+
+        let firstServer = await WordMCPServer()
+        _ = await firstServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("doc")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "format_text_range",
+            arguments: [
+                "doc_id": .string("doc"),
+                "paragraph_index": .int(0),
+                "start": .int(6),
+                "end": .int(11),
+                "strikethrough": .bool(true),
+                "vertical_align": .string("subscript"),
+                "small_caps": .bool(true),
+                "all_caps": .bool(true),
+                "underline_style": .string("double")
+            ]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "save_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+        _ = await firstServer.invokeToolForTesting(
+            name: "close_document",
+            arguments: ["doc_id": .string("doc")]
+        )
+
+        let secondServer = await WordMCPServer()
+        _ = await secondServer.invokeToolForTesting(
+            name: "open_document",
+            arguments: [
+                "path": .string(url.path),
+                "doc_id": .string("reopened"),
+                "autosave": .bool(true)
+            ]
+        )
+
+        let acceptResult = await secondServer.invokeToolForTesting(
+            name: "accept_all_revisions",
+            arguments: ["doc_id": .string("reopened")]
+        )
+
+        XCTAssertNil(acceptResult.isError)
+
+        let saved = try DocxReader.read(from: url)
+        let runs = saved.getParagraphs()[0].runs
+        XCTAssertEqual(runs.map(\.text), ["Hello ", "world"])
+        XCTAssertTrue(runs[1].properties.strikethrough)
+        XCTAssertEqual(runs[1].properties.verticalAlign, .subscript)
+        XCTAssertTrue(runs[1].properties.smallCaps)
+        XCTAssertTrue(runs[1].properties.allCaps)
+        XCTAssertEqual(runs[1].properties.underline, .double)
+    }
+
     func testFormatTextRangeRejectsUnsupportedHighlightValue() async throws {
         let url = tempURL("format-range-bad-highlight")
         try writeDocument(text: "Hello world", to: url)

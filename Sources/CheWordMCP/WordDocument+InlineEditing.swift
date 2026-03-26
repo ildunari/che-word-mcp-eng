@@ -246,8 +246,14 @@ extension WordDocument {
         var merged = base
         if override.bold { merged.bold = true }
         if override.italic { merged.italic = true }
-        if let underline = override.underline { merged.underline = underline }
+        if override.clearUnderline {
+            merged.underline = nil
+        } else if let underline = override.underline {
+            merged.underline = underline
+        }
         if override.strikethrough { merged.strikethrough = true }
+        if override.smallCaps { merged.smallCaps = true }
+        if override.allCaps { merged.allCaps = true }
         if let fontSize = override.fontSize { merged.fontSize = fontSize }
         if let fontName = override.fontName { merged.fontName = fontName }
         if let color = override.color { merged.color = color }

@@ -39,5 +39,7 @@ The `.mcpb` file can be installed via:
 
 ## Release Notes
 
+- Current package target: `v1.20.0`
+- This bundle ships the rich run-formatting release: `format_text` / `format_text_range` support `strikethrough`, `vertical_align`, `small_caps`, `all_caps`, and `underline_style`
 - Keep `manifest.json`, `CHANGELOG.md`, `README.md`, `npm/package.json`, and `Sources/CheWordMCP/Server.swift` on the same version before packaging.
 - Upload the raw GitHub release asset as `CheWordMCP` so npm `postinstall` can download it for the matching version.

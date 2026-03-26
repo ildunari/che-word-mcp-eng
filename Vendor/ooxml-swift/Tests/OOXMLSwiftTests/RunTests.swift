@@ -109,6 +109,18 @@ final class RunTests: XCTestCase {
         XCTAssertTrue(props.toXML().contains("<w:vertAlign w:val=\"subscript\"/>"))
     }
 
+    func testSmallCaps() {
+        var props = RunProperties()
+        props.smallCaps = true
+        XCTAssertTrue(props.toXML().contains("<w:smallCaps/>"))
+    }
+
+    func testAllCaps() {
+        var props = RunProperties()
+        props.allCaps = true
+        XCTAssertTrue(props.toXML().contains("<w:caps/>"))
+    }
+
     func testCharacterSpacing() {
         var props = RunProperties()
         props.characterSpacing = CharacterSpacing(spacing: 20)
@@ -182,6 +194,18 @@ final class RunTests: XCTestCase {
         XCTAssertTrue(base.bold)
         XCTAssertTrue(base.italic)
         XCTAssertEqual(base.fontSize, 24)
+    }
+
+    func testMergePropertiesIncludesCaps() {
+        var base = RunProperties()
+
+        var overlay = RunProperties()
+        overlay.smallCaps = true
+        overlay.allCaps = true
+
+        base.merge(with: overlay)
+        XCTAssertTrue(base.smallCaps)
+        XCTAssertTrue(base.allCaps)
     }
 
     // MARK: - Combined Properties

@@ -556,7 +556,27 @@ class WordMCPServer {
                         ]),
                         "underline": .object([
                             "type": .string("boolean"),
-                            "description": .string("bottom line")
+                            "description": .string("Legacy underline toggle. true = single underline, false = clear underline")
+                        ]),
+                        "underline_style": .object([
+                            "type": .string("string"),
+                            "description": .string("Underline style (single, double, dotted, dash, wave, thick, words) or 'none' to clear underline")
+                        ]),
+                        "strikethrough": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Strikethrough")
+                        ]),
+                        "vertical_align": .object([
+                            "type": .string("string"),
+                            "description": .string("Vertical alignment (superscript, subscript, baseline)")
+                        ]),
+                        "small_caps": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Small caps")
+                        ]),
+                        "all_caps": .object([
+                            "type": .string("boolean"),
+                            "description": .string("All caps")
                         ]),
                         "font_size": .object([
                             "type": .string("integer"),
@@ -610,7 +630,27 @@ class WordMCPServer {
                         ]),
                         "underline": .object([
                             "type": .string("boolean"),
-                            "description": .string("Underline")
+                            "description": .string("Legacy underline toggle. true = single underline, false = clear underline")
+                        ]),
+                        "underline_style": .object([
+                            "type": .string("string"),
+                            "description": .string("Underline style (single, double, dotted, dash, wave, thick, words) or 'none' to clear underline")
+                        ]),
+                        "strikethrough": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Strikethrough")
+                        ]),
+                        "vertical_align": .object([
+                            "type": .string("string"),
+                            "description": .string("Vertical alignment (superscript, subscript, baseline)")
+                        ]),
+                        "small_caps": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Small caps")
+                        ]),
+                        "all_caps": .object([
+                            "type": .string("boolean"),
+                            "description": .string("All caps")
                         ]),
                         "font_size": .object([
                             "type": .string("integer"),
@@ -2850,6 +2890,30 @@ class WordMCPServer {
                             "type": .string("boolean"),
                             "description": .string("Is it italicized?")
                         ]),
+                        "underline": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Filter by underline presence")
+                        ]),
+                        "underline_style": .object([
+                            "type": .string("string"),
+                            "description": .string("Filter by underline style (single, double, dotted, dash, wave, thick, words)")
+                        ]),
+                        "strikethrough": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Filter by strikethrough presence")
+                        ]),
+                        "vertical_align": .object([
+                            "type": .string("string"),
+                            "description": .string("Filter by vertical alignment (superscript, subscript, baseline)")
+                        ]),
+                        "small_caps": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Filter by small caps presence")
+                        ]),
+                        "all_caps": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Filter by all caps presence")
+                        ]),
                         "highlight": .object([
                             "type": .string("string"),
                             "description": .string("Fluorescent marker color (yellow, green, cyan, etc.)")
@@ -4807,11 +4871,58 @@ class WordMCPServer {
         throw WordError.invalidParameter("highlight", "unsupported highlight '\(rawValue)'. Use one of: \(supported)")
     }
 
+    private func parseUnderlineStyle(_ rawValue: String) throws -> UnderlineType? {
+        let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            throw WordError.invalidParameter("underline_style", "underline_style must not be empty")
+        }
+
+        if ["none", "clear"].contains(normalized.lowercased()) {
+            return nil
+        }
+
+        if let underline = UnderlineType(rawValue: normalized) {
+            return underline
+        }
+
+        let supported = ["single", "double", "dotted", "dash", "wave", "thick", "words", "none"].joined(separator: ", ")
+        throw WordError.invalidParameter("underline_style", "unsupported underline_style '\(rawValue)'. Use one of: \(supported)")
+    }
+
+    private func parseVerticalAlign(_ rawValue: String) throws -> VerticalAlign {
+        let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let verticalAlign = VerticalAlign(rawValue: normalized) {
+            return verticalAlign
+        }
+        throw WordError.invalidParameter("vertical_align", "unsupported vertical_align '\(rawValue)'. Use one of: superscript, subscript, baseline")
+    }
+
     private func runPropertiesFromArgs(_ args: [String: Value]) throws -> RunProperties {
         var format = RunProperties()
         if let bold = args["bold"]?.boolValue { format.bold = bold }
         if let italic = args["italic"]?.boolValue { format.italic = italic }
-        if let underline = args["underline"]?.boolValue { format.underline = underline ? .single : nil }
+        if let underline = args["underline"]?.boolValue {
+            if underline {
+                format.underline = .single
+            } else {
+                format.clearUnderline = true
+            }
+        }
+        if let underlineStyle = args["underline_style"]?.stringValue {
+            if let underline = try parseUnderlineStyle(underlineStyle) {
+                format.underline = underline
+                format.clearUnderline = false
+            } else {
+                format.clearUnderline = true
+                format.underline = nil
+            }
+        }
+        if let strikethrough = args["strikethrough"]?.boolValue { format.strikethrough = strikethrough }
+        if let verticalAlign = args["vertical_align"]?.stringValue {
+            format.verticalAlign = try parseVerticalAlign(verticalAlign)
+        }
+        if let smallCaps = args["small_caps"]?.boolValue { format.smallCaps = smallCaps }
+        if let allCaps = args["all_caps"]?.boolValue { format.allCaps = allCaps }
         if let fontSize = args["font_size"]?.intValue { format.fontSize = fontSize * 2 }
         if let fontName = args["font_name"]?.stringValue { format.fontName = fontName }
         if let color = args["color"]?.stringValue { format.color = color }
@@ -7411,7 +7522,9 @@ class WordMCPServer {
             if let highlight = props.highlight { formatParts.append("highlight:\(highlight.rawValue)") }
             if let fontSize = props.fontSize { formatParts.append("size:\(fontSize / 2)pt") }
             if let fontName = props.fontName { formatParts.append("font:\(fontName)") }
-            if let verticalAlign = props.verticalAlign { formatParts.append("vertAlign:\(verticalAlign.rawValue)") }
+            if let verticalAlign = props.verticalAlign { formatParts.append("verticalAlign:\(verticalAlign.rawValue)") }
+            if props.smallCaps { formatParts.append("smallCaps") }
+            if props.allCaps { formatParts.append("allCaps") }
 
             if formatParts.isEmpty {
                 output += "    Format: (none)\n"
@@ -7481,6 +7594,15 @@ class WordMCPServer {
             if let underline = props.underline {
                 text = "{{underline:\(underline.rawValue)}}\(text){{/underline}}"
             }
+            if let verticalAlign = props.verticalAlign {
+                text = "{{verticalAlign:\(verticalAlign.rawValue)}}\(text){{/verticalAlign}}"
+            }
+            if props.smallCaps {
+                text = "{{smallCaps}}\(text){{/smallCaps}}"
+            }
+            if props.allCaps {
+                text = "{{allCaps}}\(text){{/allCaps}}"
+            }
 
             result += text
         }
@@ -7521,6 +7643,12 @@ class WordMCPServer {
         let searchColor = args["color"]?.stringValue?.uppercased()
         let searchBold = args["bold"]?.boolValue
         let searchItalic = args["italic"]?.boolValue
+        let searchUnderline = args["underline"]?.boolValue
+        let searchUnderlineStyle = try args["underline_style"]?.stringValue.map(parseUnderlineStyle)
+        let searchStrikethrough = args["strikethrough"]?.boolValue
+        let searchVerticalAlign = try args["vertical_align"]?.stringValue.map(parseVerticalAlign)
+        let searchSmallCaps = args["small_caps"]?.boolValue
+        let searchAllCaps = args["all_caps"]?.boolValue
         let searchHighlight = args["highlight"]?.stringValue
 
         let paragraphs = doc.getParagraphs()
@@ -7549,6 +7677,42 @@ class WordMCPServer {
                     }
                 }
 
+                if let underline = searchUnderline {
+                    if (props.underline != nil) != underline {
+                        matches = false
+                    }
+                }
+
+                if let underlineStyle = searchUnderlineStyle {
+                    if props.underline != underlineStyle {
+                        matches = false
+                    }
+                }
+
+                if let strikethrough = searchStrikethrough {
+                    if props.strikethrough != strikethrough {
+                        matches = false
+                    }
+                }
+
+                if let verticalAlign = searchVerticalAlign {
+                    if props.verticalAlign != verticalAlign {
+                        matches = false
+                    }
+                }
+
+                if let smallCaps = searchSmallCaps {
+                    if props.smallCaps != smallCaps {
+                        matches = false
+                    }
+                }
+
+                if let allCaps = searchAllCaps {
+                    if props.allCaps != allCaps {
+                        matches = false
+                    }
+                }
+
                 if let highlight = searchHighlight {
                     if props.highlight?.rawValue != highlight {
                         matches = false
@@ -7559,8 +7723,13 @@ class WordMCPServer {
                     var formatParts: [String] = []
                     if props.bold { formatParts.append("bold") }
                     if props.italic { formatParts.append("italic") }
+                    if props.strikethrough { formatParts.append("strikethrough") }
+                    if let underline = props.underline { formatParts.append("underline:\(underline.rawValue)") }
                     if let color = props.color { formatParts.append("color:#\(color)") }
                     if let highlight = props.highlight { formatParts.append("highlight:\(highlight.rawValue)") }
+                    if let verticalAlign = props.verticalAlign { formatParts.append("verticalAlign:\(verticalAlign.rawValue)") }
+                    if props.smallCaps { formatParts.append("smallCaps") }
+                    if props.allCaps { formatParts.append("allCaps") }
 
                     results.append((
                         paragraphIndex: paraIndex,
@@ -7637,6 +7806,15 @@ class WordMCPServer {
                         }
                         if let underline = props.underline {
                             formats.append("underline:\(underline.rawValue)")
+                        }
+                        if let verticalAlign = props.verticalAlign {
+                            formats.append("verticalAlign:\(verticalAlign.rawValue)")
+                        }
+                        if props.smallCaps {
+                            formats.append("smallCaps")
+                        }
+                        if props.allCaps {
+                            formats.append("allCaps")
                         }
                         break
                     }

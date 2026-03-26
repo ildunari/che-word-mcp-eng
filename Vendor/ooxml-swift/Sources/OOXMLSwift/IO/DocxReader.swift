@@ -780,6 +780,14 @@ public struct DocxReader {
             props.strikethrough = true
         }
 
+        if element.elements(forName: "w:smallCaps").first != nil {
+            props.smallCaps = true
+        }
+
+        if element.elements(forName: "w:caps").first != nil {
+            props.allCaps = true
+        }
+
         // 字型大小
         if let sz = element.elements(forName: "w:sz").first,
            let val = sz.attribute(forName: "w:val")?.stringValue {

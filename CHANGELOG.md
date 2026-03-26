@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0] - 2026-03-25
+
+### Added
+- `format_text` and `format_text_range` now support `strikethrough`, `vertical_align`, `small_caps`, `all_caps`, and `underline_style`, while preserving legacy `underline: true` / `false` behavior for single-underline set and clear flows
+- `search_by_formatting` can now filter by underline presence/style, strikethrough, vertical alignment, and caps states in addition to the existing bold/italic/color/highlight filters
+- regression coverage for rich-format persistence across save/reopen plus accept/reject tracked-revision flows, alongside OOXML read/write coverage for caps formatting
+
+### Changed
+- bundled README, npm README, and Claude Code skill docs now describe the richer run-formatting surface and exact-match `replace_text` behavior more explicitly
+
+### Fixed
+- paragraph-wide and range-aware formatting merges now carry small-caps and all-caps into persisted OOXML output instead of dropping them on write
+- native OOXML format snapshots for tracked revisions now preserve caps formatting when revisions are saved, reopened, accepted, or rejected
+
 ## [1.19.2] - 2026-03-25
 
 ### Changed

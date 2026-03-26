@@ -25,7 +25,10 @@ public struct RunProperties: Equatable {
     public var bold: Bool = false
     public var italic: Bool = false
     public var underline: UnderlineType?
+    public var clearUnderline: Bool = false
     public var strikethrough: Bool = false
+    public var smallCaps: Bool = false
+    public var allCaps: Bool = false
     public var fontSize: Int?              // 半點 (24 = 12pt)
     public var fontName: String?
     public var color: String?              // RGB hex (e.g., "FF0000")
@@ -63,8 +66,14 @@ public struct RunProperties: Equatable {
     mutating func merge(with other: RunProperties) {
         if other.bold { self.bold = true }
         if other.italic { self.italic = true }
-        if let underline = other.underline { self.underline = underline }
+        if other.clearUnderline {
+            self.underline = nil
+        } else if let underline = other.underline {
+            self.underline = underline
+        }
         if other.strikethrough { self.strikethrough = true }
+        if other.smallCaps { self.smallCaps = true }
+        if other.allCaps { self.allCaps = true }
         if let fontSize = other.fontSize { self.fontSize = fontSize }
         if let fontName = other.fontName { self.fontName = fontName }
         if let color = other.color { self.color = color }
@@ -183,6 +192,12 @@ extension RunProperties {
         }
         if strikethrough {
             parts.append("<w:strike/>")
+        }
+        if smallCaps {
+            parts.append("<w:smallCaps/>")
+        }
+        if allCaps {
+            parts.append("<w:caps/>")
         }
         if let fontSize = fontSize {
             // OOXML 使用半點 (half-points)
