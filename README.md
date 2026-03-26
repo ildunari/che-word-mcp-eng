@@ -17,6 +17,7 @@ Legacy compatibility note: [README_zh-TW.md](README_zh-TW.md) now points to this
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.20.1 | 2026-03-25 | Let `false` clear the new rich-format boolean toggles and extend the stdio release smoke test to cover rich-format RPCs |
 | v1.20.0 | 2026-03-25 | Add rich run-format controls for strikethrough, superscript/subscript, caps, underline styles, and richer formatting search filters |
 | v1.19.2 | 2026-03-25 | Hide fully deleted tracked paragraph shells, keep tracked replace-text edits aligned to visible text in the same session, and harden release/install guidance |
 | v1.19.1 | 2026-03-24 | Add run-highlight formatting control, including `highlight: "none"` / `"clear"` to remove existing highlight |
@@ -215,8 +216,8 @@ cd mcpb && zip -r che-word-mcp.mcpb manifest.json README.md server
 Upload both release assets explicitly, then verify the real user install path and npm package before publishing:
 
 ```bash
-gh release upload v1.20.0 dist/release/CheWordMCP --clobber
-gh release upload v1.20.0 mcpb/che-word-mcp.mcpb --clobber
+gh release upload v1.20.1 dist/release/CheWordMCP --clobber
+gh release upload v1.20.1 mcpb/che-word-mcp.mcpb --clobber
 ./scripts/stdio_smoke.swift dist/release/CheWordMCP
 npm pack --dry-run --json ./npm
 ```

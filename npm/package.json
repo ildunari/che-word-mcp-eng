@@ -1,6 +1,6 @@
 {
   "name": "che-word-mcp-kosta",
-  "version": "1.20.0",
+  "version": "1.20.1",
   "description": "Swift-native MCP server for Microsoft Word (.docx) manipulation — 149 tools, no runtime dependencies",
   "author": "Che Cheng",
   "license": "MIT",
