@@ -5062,8 +5062,11 @@ class WordMCPServer {
         if let alignment = args["alignment"]?.stringValue {
             props.alignment = Alignment(rawValue: alignment)
         }
-        if let lineSpacing = args["line_spacing"]?.doubleValue {
-            props.spacing = Spacing(line: Int(lineSpacing * 240))
+        if let lineSpacing = args["line_spacing"]?.doubleValue ?? args["line_spacing"]?.intValue.map(Double.init) {
+            guard lineSpacing >= 0.5 && lineSpacing <= 10.0 else {
+                throw WordError.invalidParameter("line_spacing", "Must be between 0.5 and 10.0 (e.g. 1.0 = single, 1.5 = 1.5x, 2.0 = double)")
+            }
+            props.spacing = Spacing(line: Int(lineSpacing * 240), lineRule: .auto)
         }
         if let spaceBefore = args["space_before"]?.intValue {
             if props.spacing == nil { props.spacing = Spacing() }

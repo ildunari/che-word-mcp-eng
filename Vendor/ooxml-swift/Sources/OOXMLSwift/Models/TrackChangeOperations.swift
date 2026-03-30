@@ -522,6 +522,12 @@ extension WordDocument {
                 paragraph.runs[runIndex].properties.formatChange = nil
             }
 
+            if let trackedRuns = paragraph.trackedRuns {
+                for i in trackedRuns.indices where trackedRuns[i].run.properties.formatChange?.revision.id == revision.id {
+                    paragraph.trackedRuns?[i].run.properties.formatChange = nil
+                }
+            }
+
             paragraph.runs = mergeRuns(paragraph.runs)
             let normalized = normalizeTrackedParagraph(paragraph)
             if normalized.trackedRuns?.isEmpty == true && normalized.getText().isEmpty {
